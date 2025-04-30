@@ -18,16 +18,10 @@
 
 import pyperclip
 import time
-import re
-import instaloader
-import threading
 import os
-import platform
 import subprocess
 import tempfile 
 import logging
-import builtins
-import pathlib
 import signal
 from platformdirs import user_log_dir
 from pathlib import Path
@@ -53,73 +47,6 @@ def handler_offline(signum, frame):
     modo = MODO_OFFLINE
     logging.info("¡Señal OFFLINE recibida! Volviendo al modo OFFLINE.")
 
-
-# Abre archivos en el sistema
-def abrir_archivo(ruta):
-    sistema = platform.system()
-    try:
-        if sistema == "Windows":
-            os.startfile(ruta)
-        elif sistema == "Darwin":  # macOS
-            subprocess.run(["open", ruta])
-        else:  # Linux
-            subprocess.run(["xdg-open", ruta])
-    except Exception as e:
-        logging.info(f"No se pudo abrir el archivo: {e}")
-
-# Descarga y a continuación reproduce vídeos o fotos de instagram
-def descargar_y_reproducir(url):
-    loader = instaloader.Instaloader(save_metadata=False, download_comments=False)
-
-    match = re.search(r"instagram\.com/(p|reel|tv)/([a-zA-Z0-9_-]+)", url)
-    if not match:
-        logging.info("URL de instagram no válida o formato no reconocido.")
-        return
-
-    shortcode = match.group(2)
-
-    try:
-        post = instaloader.Post.from_shortcode(loader.context, shortcode)
-
-        # Cambiar temporalmente al directorio /tmp
-        tmp_dir = tempfile.gettempdir()
-        cwd_original = os.getcwd()
-        os.chdir(tmp_dir)
-
-        # Descargar en carpeta con nombre del shortcode dentro de /tmp
-        loader.download_post(post, target=shortcode)
-
-        # Volver al directorio original
-        os.chdir(cwd_original)
-
-        # Ahora revisamos la carpeta
-        carpeta_post = os.path.join(tmp_dir, shortcode)
-        archivos = os.listdir(carpeta_post)
-        archivos_media = [f for f in archivos if f.endswith(('.mp4', '.jpg'))]
-
-        if not archivos_media:
-            logging.info("No se encontró contenido multimedia.")
-            return
-
-        # Priorizar vídeo si hay
-        archivo_video = next((f for f in archivos_media if f.endswith('.mp4')), None)
-        if archivo_video:
-            ruta_media = os.path.join(carpeta_post, archivo_video)
-        else:
-            ruta_media = os.path.join(carpeta_post, archivos_media[0])
-
-        logging.info(f"Abrir archivo: {ruta_media}")
-        abrir_archivo(ruta_media)
-
-    except Exception as e:
-        logging.info(f"Error al procesar el post: {e}")
-
-
-# Descarga un archivo de instagram en un hilo separado
-def descargar_en_hilo(url):
-    hilo = threading.Thread(target=descargar_y_reproducir, args=(url,))
-    hilo.start()
-    return hilo
 
 # Reproduce vídeo de youtube en streaming
 def reproducir_streaming(url):
