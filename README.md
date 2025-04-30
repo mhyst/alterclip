@@ -131,6 +131,48 @@ systemctl --user daemon-reexec
 systemctl --user daemon-reload
 systemctl --user enable --now alterclip.service
 ```
+---
+
+## 🟢 Ejecutar Alterclip con `gtk-launch`
+
+Para lanzar **Alterclip** utilizando `gtk-launch`, es necesario tener un archivo `.desktop` correctamente configurado en tu sistema. Este método es útil si quieres integrar Alterclip con entornos gráficos o lanzadores de aplicaciones.
+
+### 1. Crear el archivo `.desktop`
+
+Crea un archivo llamado `alterclip.desktop` en `~/.local/share/applications/` con el siguiente contenido:
+
+```ini
+[Desktop Entry]
+Name=Alterclip
+Exec=python3 /ruta/completa/a/alterclip.py
+Terminal=false
+Type=Application
+Icon=utilities-terminal
+Categories=Utility;
+```
+
+> 🔧 **Importante**: Asegúrate de reemplazar `/ruta/completa/a/alterclip.py` con la ruta real al script principal de Alterclip.
+
+### 2. Dar permisos de ejecución
+
+Dale permisos de ejecución al archivo `.desktop`:
+
+```bash
+chmod +x ~/.local/share/applications/alterclip.desktop
+```
+
+### 3. Ejecutar Alterclip con `gtk-launch`
+
+Una vez creado el archivo `.desktop`, puedes lanzar Alterclip desde la terminal con:
+
+```bash
+gtk-launch alterclip
+```
+
+> 🧠 **Nota**: El argumento que se pasa a `gtk-launch` debe coincidir con el valor de `Name=` en el archivo `.desktop`, en minúsculas y sin espacios. Si tienes dudas, también puedes usar el nombre del archivo sin la extensión: `gtk-launch alterclip`.
+
+---
+
 
 ---
 
