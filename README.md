@@ -6,7 +6,7 @@
 
 ## ✨ Características
 
-- 🔁 Reemplaza dominios por versiones alternativas (más seguras o compartibles).
+- 🔁 Reemplaza dominios por versiones alternativas (más compartibles).
 - 📋 Monitoriza el portapapeles de forma continua.
 - 🎬 Abre automáticamente vídeos de YouTube o Instagram en modo streaming.
 - 🧠 Decide automáticamente si cambiar o no un texto según su contenido.
@@ -21,7 +21,7 @@
 - Paquetes Python:
 
   ```bash
-  pip install pyperclip instaloader platformdirs
+  pip install pyperclip platformdirs
   ```
 
 - Reproductor multimedia como `mpv`, `vlc`, etc. (por defecto usa `mpv`).
@@ -51,9 +51,9 @@ Alterclip tiene dos modos:
   Reproduce enlaces compatibles como Instagram o YouTube.
 
 - 🔴 **Modo Offline**:  
-  Solo reescribe URLs, sin descargar ni abrir contenido.
+  Solo reescribe URLs, sin abrir contenido.
 
-Puedes cambiar entre modos sin reiniciar el script:
+En sistemas POSIX puedes cambiar entre modos sin reiniciar el script:
 
 ```bash
 kill -USR1 <pid>  # Activa modo streaming
@@ -97,15 +97,7 @@ Los logs se guardan en:
 ~/.local/state/alterclip/alterclip.log
 ```
 
-Contienen información útil como el PID, cambios de modo, errores de reproducción o descarga, y actividad reciente.
-
----
-
-## ⚠️ Consideraciones de seguridad
-
-- Este script intercepta todo lo que copies. No lo uses si estás copiando datos sensibles.
-- Algunos de los dominios reescritos pueden no estar bajo tu control. Verifica antes de compartir.
-- Instagram puede cambiar su API y romper la funcionalidad de descarga.
+Contienen información útil como el PID, cambios de modo, errores de reproducción y actividad reciente.
 
 ---
 
@@ -150,7 +142,7 @@ Este proyecto está licenciado bajo la [GNU GPL v3](https://www.gnu.org/licenses
 
 ## 🙌 Créditos
 
-Creado por [Tu Nombre o Alias Aquí].  
+Creado por [mhyst].  
 Inspirado en la necesidad de compartir enlaces sin bloqueos ni rastreadores.
 
 
