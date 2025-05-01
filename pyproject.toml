@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "alterclip"
+version = "0.1.0"
+description = "Herramienta para interceptar URLs desde el portapapeles y modificarlas o reproducirlas"
+authors = [{ name="Julio Serrano", email="mhysterio@gmail.com" }]
+readme = "README.md"
+license = {text = "GPL3"}
+requires-python = ">=3.8"
+dependencies = [
+    "pyperclip",
+    "plyer",
+    "platformdirs"
+]
+
+[project.urls]
+Homepage = "https://github.com/mhyst/alterclip"

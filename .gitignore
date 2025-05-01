@@ -1,0 +1,4 @@
+# Ignorar carpetas de distribución y metadatos de instalación
+dist/
+alterclip.egg-info/
+
