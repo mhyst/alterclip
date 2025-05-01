@@ -50,7 +50,14 @@ def handler_offline(signum, frame):
 
 # Reproduce vídeo de youtube en streaming
 def reproducir_streaming(url):
-    subprocess.Popen([REPRODUCTOR_VIDEO, url])
+    # Ejecutar el reproductor sin bloquear el script ni mostrar errores
+    subprocess.Popen(
+        [REPRODUCTOR_VIDEO, url],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        stdin=subprocess.DEVNULL,
+        start_new_session=True  # Aísla completamente el proceso
+    )
 
 
 # ¿La cadena contiene varias líneas?
