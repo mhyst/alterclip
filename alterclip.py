@@ -23,6 +23,8 @@ import subprocess
 import tempfile 
 import logging
 import signal
+import tkinter as tk
+from tkinter import messagebox
 from platformdirs import user_log_dir
 from pathlib import Path
 
@@ -47,17 +49,27 @@ def handler_offline(signum, frame):
     modo = MODO_OFFLINE
     logging.info("¡Señal OFFLINE recibida! Volviendo al modo OFFLINE.")
 
+def mostrar_error(mensaje):
+    # Crea una ventana oculta para lanzar el messagebox
+    root = tk.Tk()
+    root.withdraw()  # Oculta la ventana principal
+    messagebox.showerror("Error", mensaje)
+    root.destroy()
+
 
 # Reproduce vídeo de youtube en streaming
 def reproducir_streaming(url):
-    # Ejecutar el reproductor sin bloquear el script ni mostrar errores
-    subprocess.Popen(
-        [REPRODUCTOR_VIDEO, url],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        stdin=subprocess.DEVNULL,
-        start_new_session=True  # Aísla completamente el proceso
-    )
+    try:
+        proceso = subprocess.Popen(
+            [REPRODUCTOR_VIDEO, url],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL
+        )
+        exit_code = proceso.wait()
+        if exit_code != 0:
+            mostrar_error(f"La reproducción falló\nCódigo de error: {exit_code}")
+    except Exception as e:
+        mostrar_error(f"Error al lanzar el reproductor:\n{e}")
 
 
 # ¿La cadena contiene varias líneas?
