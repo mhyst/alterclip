@@ -23,8 +23,7 @@ import subprocess
 import tempfile 
 import logging
 import signal
-import tkinter as tk
-from tkinter import messagebox
+from plyer import notification
 from platformdirs import user_log_dir
 from pathlib import Path
 
@@ -50,11 +49,12 @@ def handler_offline(signum, frame):
     logging.info("¡Señal OFFLINE recibida! Volviendo al modo OFFLINE.")
 
 def mostrar_error(mensaje):
-    # Crea una ventana oculta para lanzar el messagebox
-    root = tk.Tk()
-    root.withdraw()  # Oculta la ventana principal
-    messagebox.showerror("Error", mensaje)
-    root.destroy()
+    notification.notify(
+        title='Error',
+        message=f"{mensaje}",
+        app_name='Alterclip',
+        timeout=20  # duración en segundos
+    )
 
 
 # Reproduce vídeo de youtube en streaming
