@@ -21,7 +21,7 @@
 - Paquetes Python:
 
   ```bash
-  pip install pyperclip platformdirs
+  pip install pyperclip platformdirs plyer
   ```
 
 - Reproductor multimedia como `mpv`, `vlc`, etc. (por defecto usa `mpv`).
