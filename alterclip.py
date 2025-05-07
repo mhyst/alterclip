@@ -26,6 +26,9 @@ import signal
 from plyer import notification
 from platformdirs import user_log_dir
 from pathlib import Path
+import socket
+import sys
+import threading
 
 # Modificar para indicar tu reproductor favorito
 REPRODUCTOR_VIDEO="mpv"
@@ -47,6 +50,39 @@ def handler_offline(signum, frame):
     global modo
     modo = MODO_OFFLINE
     logging.info("¡Señal OFFLINE recibida! Volviendo al modo OFFLINE.")
+
+def handler_udp_server():
+    global modo
+
+    server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    server_socket.bind(('0.0.0.0', 12345))
+
+    while True:
+        data, addr = server_socket.recvfrom(1024)
+        mensaje = data.decode()
+        logging.info(f"Mensaje de {addr}: {mensaje}")
+        if modo == MODO_OFFLINE:
+            modo = MODO_STREAMING
+            logging.info("Pasando al modo streaming")
+            respuesta = "Modo streaming"
+        else:
+            modo = MODO_OFFLINE
+            logging.info("Pasando al modo offline")
+            respuesta = "Modo offline"
+        server_socket.sendto(respuesta.encode(),addr)
+
+def udp_client(mensaje):
+    dest_ip = "127.0.0.1"
+    dest_port = 12345
+
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.sendto(mensaje.encode(), (dest_ip, dest_port))
+    print(f"Enviando mensaje: {mensaje}")
+    # recibir respuesta
+    datos, _ = sock.recvfrom(1024)
+    print(f"Respuesta del servidor: {datos.decode()}")
+    sock.close()
+
 
 def mostrar_error(mensaje):
     notification.notify(
@@ -140,6 +176,11 @@ def interceptarCambiarURL(cadena: str) -> str:
 
 #Programa principal
 if __name__ == "__main__":
+    if len(sys.argv) > 1:
+        print("Enviando paquete UDP para alternar el modo")
+        udp_client("toggle")
+        sys.exit(0)
+
     # Configurar logging
     app_name = "alterclip"
     log_dir = Path(user_log_dir(app_name))
@@ -163,6 +204,11 @@ if __name__ == "__main__":
     logging.info("Envíale la señal USR2 con `kill -USR1 <pid>` para cambiar el modo offline.")
     logging.info("Por defecto se encuentra en el modo streaming")
 
+    # Iniciamos el servidor UDP a la espera de comandos
+    hilo_udp = threading.Thread(target=handler_udp_server)
+    hilo_udp.start()
+
+    # Bucle principal
     prev = ""
     while True:
         text = pyperclip.paste()
@@ -171,3 +217,5 @@ if __name__ == "__main__":
             pyperclip.copy(modified)
             prev = modified
         time.sleep(0.2)
+
+    hilo_udp.join()
