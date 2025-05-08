@@ -20,168 +20,160 @@ import pyperclip
 import time
 import os
 import subprocess
-import tempfile 
 import logging
 import signal
-from plyer import notification
-from platformdirs import user_log_dir
-from pathlib import Path
 import socket
 import sys
 import threading
+from plyer import notification
+from platformdirs import user_log_dir
+from pathlib import Path
+from typing import Optional
+import shlex
 
-# Modificar para indicar tu reproductor favorito
-REPRODUCTOR_VIDEO="mpv"
+# Constantes
+REPRODUCTOR_VIDEO = os.getenv("ALTERCLIP_PLAYER", "mpv")
+MODO_STREAMING = 0
+MODO_OFFLINE = 1
+SIGNAL_STREAMING = signal.SIGUSR1
+SIGNAL_OFFLINE = signal.SIGUSR2
+UDP_PORT = 12345
 
-# Modos de funcionamiento por señales
-MODO_STREAMING=0        # Reproduce vídeos de youtube y descarga y abre contenido de
-                        # Instagram
-MODO_OFFLINE=1          # No intenta reproducir ni descargar
-modo=MODO_STREAMING
+class Alterclip:
+    def __init__(self):
+        self.modo = MODO_STREAMING
+        self.prev_clipboard = ""
+        self.reemplazos = {
+            "x.com": "fixupx.com",
+            "tiktok.com": "tfxktok.com",
+            "twitter.com": "fixupx.com",
+            "fixupx.com": "twixtter.com",
+            "reddit.com": "reddxt.com",
+            "onlyfans.com": "0nlyfans.net",
+            "patreon.com": "pxtreon.com",
+            "pornhub.com": "pxrnhub.com",
+            "nhentai.net": "nhentaix.net",
+            "discord.gg": "disxcord.gg",
+            "discord.com": "discxrd.com",
+            "mediafire.com": "mediaf1re.com"
+        }
+        self.streaming_sources = [
+            "instagram.com",
+            "youtube.com", "youtu.be",
+            "facebook.com"
+        ]
 
-#Intercepta señal USR1 y activa modo streaming
-def handler_streaming(signum, frame):
-    global modo
-    modo = MODO_STREAMING
-    logging.info("¡Señal STREAMING recibida! Cambiando a modo STREAMING.")
+    def handler_streaming(self, signum, frame):
+        self.modo = MODO_STREAMING
+        logging.info("\u00a1Se\u00f1al STREAMING recibida! Cambiando a modo STREAMING.")
 
-#Intercepta señal USR2 y activa modo offline
-def handler_offline(signum, frame):
-    global modo
-    modo = MODO_OFFLINE
-    logging.info("¡Señal OFFLINE recibida! Volviendo al modo OFFLINE.")
+    def handler_offline(self, signum, frame):
+        self.modo = MODO_OFFLINE
+        logging.info("\u00a1Se\u00f1al OFFLINE recibida! Cambiando a modo OFFLINE.")
 
-def handler_udp_server():
-    global modo
-
-    server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    server_socket.bind(('0.0.0.0', 12345))
-
-    while True:
-        data, addr = server_socket.recvfrom(1024)
-        mensaje = data.decode()
-        logging.info(f"Mensaje de {addr}: {mensaje}")
-        if modo == MODO_OFFLINE:
-            modo = MODO_STREAMING
-            logging.info("Pasando al modo streaming")
-            respuesta = "Modo streaming"
-        else:
-            modo = MODO_OFFLINE
-            logging.info("Pasando al modo offline")
-            respuesta = "Modo offline"
-        server_socket.sendto(respuesta.encode(),addr)
-
-def udp_client(mensaje):
-    dest_ip = "127.0.0.1"
-    dest_port = 12345
-
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.sendto(mensaje.encode(), (dest_ip, dest_port))
-    print(f"Enviando mensaje: {mensaje}")
-    # recibir respuesta
-    datos, _ = sock.recvfrom(1024)
-    print(f"Respuesta del servidor: {datos.decode()}")
-    sock.close()
-
-
-def mostrar_error(mensaje):
-    notification.notify(
-        title='Error',
-        message=f"{mensaje}",
-        app_name='Alterclip',
-        timeout=20  # duración en segundos
-    )
-
-
-# Reproduce vídeo de youtube en streaming
-def reproducir_streaming(url):
-    try:
-        proceso = subprocess.Popen(
-            [REPRODUCTOR_VIDEO, url],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL
+    def mostrar_error(self, mensaje: str):
+        notification.notify(
+            title='Error',
+            message=mensaje,
+            app_name='Alterclip',
+            timeout=20
         )
-        exit_code = proceso.wait()
-        if exit_code != 0:
-            mostrar_error(f"La reproducción falló\nCódigo de error: {exit_code}")
-    except Exception as e:
-        mostrar_error(f"Error al lanzar el reproductor:\n{e}")
+
+    def reproducir_streaming(self, url: str):
+        try:
+            proceso = subprocess.Popen(
+                [REPRODUCTOR_VIDEO] + shlex.split(url),
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL
+            )
+            exit_code = proceso.wait()
+            if exit_code != 0:
+                self.mostrar_error(f"La reproducci\u00f3n fall\u00f3\nC\u00f3digo de error: {exit_code}")
+        except Exception as e:
+            self.mostrar_error(f"Error al lanzar el reproductor:\n{e}")
+
+    def es_streaming_compatible(self, url: str) -> bool:
+        return any(source in url for source in self.streaming_sources)
+
+    def interceptar_cambiar_url(self, cadena: str) -> str:
+        if '\n' in cadena or not cadena.startswith(('http://', 'https://')):
+            return cadena
+
+        if self.modo == MODO_STREAMING and self.es_streaming_compatible(cadena):
+            self.reproducir_streaming(cadena)
+            return cadena
+
+        for original, nuevo in self.reemplazos.items():
+            if original in cadena:
+                return cadena.replace(original, nuevo)
+
+        return cadena
+
+    def udp_server(self):
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as server_socket:
+            server_socket.bind(('0.0.0.0', UDP_PORT))
+            while True:
+                data, addr = server_socket.recvfrom(1024)
+                mensaje = data.decode()
+                logging.info(f"Mensaje de {addr}: {mensaje}")
+                if self.modo == MODO_OFFLINE:
+                    self.modo = MODO_STREAMING
+                    respuesta = "Modo streaming"
+                else:
+                    self.modo = MODO_OFFLINE
+                    respuesta = "Modo offline"
+                logging.info(f"Respuesta enviada: {respuesta}")
+                server_socket.sendto(respuesta.encode(), addr)
+
+    def iniciar(self):
+        signal.signal(SIGNAL_STREAMING, self.handler_streaming)
+        signal.signal(SIGNAL_OFFLINE, self.handler_offline)
+
+        logging.info("Programa iniciado. PID: %d", os.getpid())
+        logging.info("Envia USR1 (kill -USR1 <pid>) para STREAMING, USR2 para OFFLINE")
+
+        hilo_udp = threading.Thread(target=self.udp_server, daemon=True)
+        hilo_udp.start()
+
+        try:
+            while True:
+                try:
+                    text = pyperclip.paste()
+                except Exception as e:
+                    logging.warning(f"Error al leer del portapapeles: {e}")
+                    continue
+
+                if text != self.prev_clipboard:
+                    modified = self.interceptar_cambiar_url(text)
+                    if modified != text:
+                        pyperclip.copy(modified)
+                        self.prev_clipboard = modified
+                    else:
+                        self.prev_clipboard = text
+
+                time.sleep(0.2)
+        except KeyboardInterrupt:
+            logging.info("Programa terminado por el usuario.")
 
 
-# ¿La cadena contiene varias líneas?
-def esMultiLinea(cadena: str) -> bool:
-	return '\n' in cadena
+# Cliente UDP para cambiar el modo
+def udp_client(mensaje: str):
+    dest_ip = "127.0.0.1"
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        sock.sendto(mensaje.encode(), (dest_ip, UDP_PORT))
+        print(f"Enviando mensaje: {mensaje}")
+        datos, _ = sock.recvfrom(1024)
+        print(f"Respuesta del servidor: {datos.decode()}")
+    finally:
+        sock.close()
 
 
-# ¿La cadena es una URL?
-def esURL(cadena: str) -> bool:
-    return cadena.startswith(('http://', 'https://'))
-
-
-#Intercepta una cadena del portapapeles y decide si debe cambiarla o no
-def interceptarCambiarURL(cadena: str) -> str:
-    global modo
-
-    resultado = cadena
-
-    # Si es multilínea, no se modifica
-    if esMultiLinea(cadena):
-        return resultado
-
-    # Si no es una URL, no se modifica
-    if not esURL(cadena):
-        return resultado
-
-    # Si el modo streaming se encuentra activo se intenta reproducir si procede
-    if modo == MODO_STREAMING:
-
-        # Fuentes de streaming compatibles
-        streaming_sources = [ "instagram.com",
-                              "youtube.com", "youtu.be",
-                              "facebook.com" ]
-
-        for streaming_source in streaming_sources:
-            if streaming_source in cadena:
-                reproducir_streaming(cadena)
-                return cadena
-
-    # Diccionario de dominios a reemplazar
-    reemplazos = {
-        "x.com": "fixupx.com",
-        "tiktok.com": "tfxktok.com",
-        # "instagram.com": "ixxstagram.com",
-        # "facebook.com": "facebxxk.com",
-        "twitter.com": "fixupx.com",  # Para revertir links antiguos
-        "fixupx.com": "twixtter.com",  # Si prefieres no usar el nuevo dominio
-        "reddit.com": "reddxt.com",
-        # "youtube.com": "youtubefixupx.com",
-        # "youtu.be": "youx.tube",
-        "onlyfans.com": "0nlyfans.net",  # Muy útil si compartes contenido oculto
-        "patreon.com": "pxtreon.com",
-        "pornhub.com": "pxrnhub.com",  # Si estás compartiendo material NSFW
-        "nhentai.net": "nhentaix.net",
-        "discord.gg": "disxcord.gg",  # Enlaces de invitación
-        "discord.com": "discxrd.com",
-        "mediafire.com": "mediaf1re.com"  # Enlaces de descargas
-    }
-
-    # Aplicamos el primer reemplazo que coincida
-    for original, nuevo in reemplazos.items():
-        if original in cadena:
-            resultado = cadena.replace(original, nuevo)
-            break
-
-    return resultado
-
-
-#Programa principal
 if __name__ == "__main__":
     if len(sys.argv) > 1:
-        print("Enviando paquete UDP para alternar el modo")
         udp_client("toggle")
         sys.exit(0)
 
-    # Configurar logging
     app_name = "alterclip"
     log_dir = Path(user_log_dir(app_name))
     log_dir.mkdir(parents=True, exist_ok=True)
@@ -196,26 +188,5 @@ if __name__ == "__main__":
         ]
     )
 
-    signal.signal(signal.SIGUSR1, handler_streaming)
-    signal.signal(signal.SIGUSR2, handler_offline)
-
-    logging.info("Programa iniciado. PID: %d", os.getpid())
-    logging.info("Envíale la señal USR1 con `kill -USR1 <pid>` para cambiar el modo streaming.")
-    logging.info("Envíale la señal USR2 con `kill -USR1 <pid>` para cambiar el modo offline.")
-    logging.info("Por defecto se encuentra en el modo streaming")
-
-    # Iniciamos el servidor UDP a la espera de comandos
-    hilo_udp = threading.Thread(target=handler_udp_server)
-    hilo_udp.start()
-
-    # Bucle principal
-    prev = ""
-    while True:
-        text = pyperclip.paste()
-        if text != prev:
-            modified = interceptarCambiarURL(text)
-            pyperclip.copy(modified)
-            prev = modified
-        time.sleep(0.2)
-
-    hilo_udp.join()
+    app = Alterclip()
+    app.iniciar()
