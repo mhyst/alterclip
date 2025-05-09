@@ -70,39 +70,14 @@ def mostrar_error(mensaje):
         '--content', mensaje
     ])
 
-# Abrir URL con intent de Android
-#def reproducir_streaming(url):
-#    try:
-#        subprocess.run([
-#            'am', 'start', '--user', '0', '-a', 'android.intent.action.VIEW', '-d', url
-#        ])
-#    except Exception as e:
-#        mostrar_error(f"Error al abrir el navegador:\n{e}")
-
-
 def reproducir_streaming(url):
-    # Construir el comando 'am start' como una lista
-    comando = [
-        "am", "start", "-n", "is.xyz.mpv/.MPVActivity", 
-        "-a", "android.intent.action.VIEW", 
-        "-d", url
-    ]
-    
     try:
-        # Ejecutar el comando usando subprocess.Popen
-        proceso = subprocess.Popen(comando, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        
-        # Esperar a que el proceso termine (opcional)
-        stdout, stderr = proceso.communicate()
+        subprocess.run(['mpv', '--vo=x11', url], check=True)
+    except subprocess.CalledProcessError as e:
+        logging.info(f"Error al reproducir el vídeo: {e}")
+    except FileNotFoundError:
+        logging.info("mpv no está instalado o no se encuentra en el PATH.")
 
-        # Comprobar si hubo algún error
-        if proceso.returncode != 0:
-            print(f"Error al ejecutar el comando: {stderr.decode()}")
-        else:
-            print(f"Reproducción iniciada: {stdout.decode()}")
-
-    except Exception as e:
-        print(f"Error al intentar ejecutar el comando: {e}")
 
 # Clipboard usando termux-api
 def get_clipboard():
