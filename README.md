@@ -8,10 +8,12 @@
 
 - 🔁 Reemplaza dominios por versiones alternativas (más compartibles).
 - 📋 Monitoriza el portapapeles de forma continua.
-- 🎬 Abre automáticamente vídeos de YouTube o Instagram en modo streaming.
+- 🎬 Abre automáticamente vídeos de YouTube, Instagram y Facebook con tu reproductor multimedia favorito.
+- 📚 Almacena el historial de vídeos reproducidos con título y plataforma.
 - 🧠 Decide automáticamente si cambiar o no un texto según su contenido.
 - 📦 Compatible con Linux, macOS y Windows (con pequeñas adaptaciones).
 - 🔧 Dos modos de funcionamiento con cambio dinámico mediante señales.
+- 📊 Interfaz de línea de comandos para gestionar el historial y reproducir vídeos guardados.
 
 ---
 
@@ -26,12 +28,18 @@
 
 - Reproductor multimedia como `mpv`, `vlc`, etc. (por defecto usa `mpv`).
 - Linux (uso de señales POSIX como `SIGUSR1`/`SIGUSR2`; no compatible con Windows para eso).
+- Para usar la API de YouTube (opcional pero recomendado para mejor precisión):
+  - Crea un proyecto en Google Cloud Platform
+  - Obtén una API key de YouTube Data API v3
+  - Configura la variable de entorno `YOUTUBE_API_KEY` con tu clave
 
 ---
 
 ## 🚀 Uso
 
-1. Ejecuta el script:
+### Ejecutar el daemon
+
+1. Ejecuta el daemon principal:
 
    ```bash
    python3 alterclip.py
@@ -39,7 +47,34 @@
 
 2. Copia una URL al portapapeles. Si es una de las compatibles, se transformará automáticamente y reemplazará el contenido del portapapeles.
 
-3. En modo **streaming**, si copias un enlace de YouTube o Instagram, se abrirá automáticamente con tu reproductor.
+3. En modo **streaming**, si copias un enlace de YouTube, Instagram o Facebook, se abrirá automáticamente con tu reproductor.
+
+### Usar la interfaz de línea de comandos
+
+El CLI (`alterclip-cli.py`) te permite:
+
+- Ver el historial de vídeos reproducidos
+- Reproducir cualquier vídeo guardado
+- Cambiar el modo de funcionamiento
+
+Ejemplos de uso:
+
+```bash
+# Ver historial completo
+./alterclip-cli history
+
+# Ver solo las últimas 5 entradas
+./alterclip-cli history --limit 5
+
+# Reproducir un vídeo guardado por su ID
+./alterclip-cli play 123
+
+# Cambiar el modo de alterclip
+./alterclip-cli toggle
+
+# Ver ayuda completa
+./alterclip-cli help
+```
 
 ---
 
@@ -48,17 +83,25 @@
 Alterclip tiene dos modos:
 
 - 🟢 **Modo Streaming (por defecto)**:  
-  Reproduce enlaces compatibles como Instagram o YouTube.
+  Reproduce enlaces compatibles como YouTube, Instagram o Facebook.
 
 - 🔴 **Modo Offline**:  
-  Solo reescribe URLs, sin abrir contenido.
+  Solo reescribe URLs y las guarda en el historial para futura referencia.
 
-En sistemas POSIX puedes cambiar entre modos sin reiniciar el script:
+Puedes cambiar entre modos de dos formas:
 
-```bash
-kill -USR1 <pid>  # Activa modo streaming
-kill -USR2 <pid>  # Activa modo offline
-```
+1. Usando señales (solo en sistemas POSIX):
+
+   ```bash
+   kill -USR1 <pid>  # Activa modo streaming
+   kill -USR2 <pid>  # Activa modo offline
+   ```
+
+2. Usando el CLI:
+
+   ```bash
+   ./alterclip-cli toggle
+   ```
 
 El PID aparece al inicio en los logs, o puedes obtenerlo con:
 
@@ -87,9 +130,22 @@ Algunos ejemplos de reemplazos automáticos de enlaces:
 | discord.com      | discxrd.com      |
 | mediafire.com    | mediaf1re.com    |
 
+## 📚 Historial de vídeos
+
+Alterclip guarda automáticamente todas las URLs de streaming en su base de datos, incluso cuando está en modo offline. Para cada vídeo se almacena:
+
+- URL original
+- Título del contenido (cuando está disponible)
+- Plataforma (YouTube, Instagram, Facebook)
+- Fecha y hora de reproducción
+
+Puedes acceder al historial usando el CLI:
+
 ---
 
-## 🗂️ Logs
+## 🗂️ Logs y Base de datos
+
+### Logs
 
 Los logs se guardan en:
 
@@ -98,6 +154,14 @@ Los logs se guardan en:
 ```
 
 Contienen información útil como el PID, cambios de modo, errores de reproducción y actividad reciente.
+
+### Base de datos
+
+La base de datos de historial se almacena en:
+
+```
+~/.local/state/alterclip/streaming_history.db
+```
 
 ---
 
