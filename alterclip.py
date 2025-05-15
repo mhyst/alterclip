@@ -25,11 +25,15 @@ import signal
 import socket
 import sys
 import threading
+import sqlite3
 from plyer import notification
 from platformdirs import user_log_dir
 from pathlib import Path
 from typing import Optional
 import shlex
+import requests
+import re
+from urllib.parse import urlparse, parse_qs
 
 # Constantes
 REPRODUCTOR_VIDEO = os.getenv("ALTERCLIP_PLAYER", "mpv")
@@ -41,6 +45,10 @@ UDP_PORT = 12345
 
 class Alterclip:
     def __init__(self):
+        # Inicializar la base de datos
+        self.db_path = Path(user_log_dir("alterclip")) / "streaming_history.db"
+        self._initialize_db()
+        
         self.modo = MODO_STREAMING
         self.prev_clipboard = ""
         self.reemplazos = {
@@ -99,9 +107,14 @@ class Alterclip:
         if '\n' in cadena or not cadena.startswith(('http://', 'https://')):
             return cadena
 
-        if self.modo == MODO_STREAMING and self.es_streaming_compatible(cadena):
-            self.reproducir_streaming(cadena)
-            return cadena
+        # Si es una URL de streaming, la guardamos en la base de datos
+        if self.es_streaming_compatible(cadena):
+            self._save_streaming_url(cadena)
+            
+            # Solo reproducimos si estamos en modo streaming
+            if self.modo == MODO_STREAMING:
+                self.reproducir_streaming(cadena)
+                return cadena
 
         for original, nuevo in self.reemplazos.items():
             if original in cadena:
@@ -124,6 +137,128 @@ class Alterclip:
                     respuesta = "Modo offline"
                 logging.info(f"Respuesta enviada: {respuesta}")
                 server_socket.sendto(respuesta.encode(), addr)
+
+    def _initialize_db(self):
+        """Inicializa la base de datos y crea la tabla si no existe"""
+        try:
+            self.db_path.parent.mkdir(parents=True, exist_ok=True)
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS streaming_history (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    url TEXT NOT NULL,
+                    title TEXT,
+                    platform TEXT,
+                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            logging.error(f"Error al inicializar la base de datos: {e}")
+
+    def _get_content_title(self, url: str) -> tuple[str, str]:
+        """Obtiene el título del contenido y la plataforma"""
+        try:
+            # Determinar la plataforma
+            if 'youtube.com' in url or 'youtu.be' in url:
+                platform = 'YouTube'
+                # Para YouTube, usamos la API o parseamos el título del HTML
+                try:
+                    # Intentar usar la API de YouTube
+                    youtube_api_key = os.getenv('YOUTUBE_API_KEY')
+                    if youtube_api_key:
+                        video_id = self._extract_youtube_id(url)
+                        if video_id:
+                            api_url = f'https://www.googleapis.com/youtube/v3/videos?id={video_id}&key={youtube_api_key}&part=snippet'
+                            response = requests.get(api_url)
+                            data = response.json()
+                            if 'items' in data and data['items']:
+                                return data['items'][0]['snippet']['title'], platform
+                except:
+                    pass
+                
+                # Si falla la API, parseamos el HTML
+                response = requests.get(url)
+                title_match = re.search(r'<title>(.*?)</title>', response.text)
+                if title_match:
+                    title = title_match.group(1).split(' - ')[0]
+                    return title, platform
+
+            elif 'instagram.com' in url:
+                platform = 'Instagram'
+                response = requests.get(url)
+                title_match = re.search(r'"description" content="(.*?)"', response.text)
+                if title_match:
+                    return title_match.group(1), platform
+
+            elif 'facebook.com' in url or 'fb.watch' in url:
+                platform = 'Facebook'
+                try:
+                    # Intentar obtener el título usando metadatos Open Graph
+                    response = requests.get(url)
+                    # Buscar el título usando diferentes patrones
+                    title_match = re.search(r'property="og:title" content="(.*?)"', response.text)
+                    if not title_match:
+                        title_match = re.search(r'"title" content="(.*?)"', response.text)
+                    if not title_match:
+                        title_match = re.search(r'<title>(.*?)</title>', response.text)
+                    
+                    if title_match:
+                        title = title_match.group(1).strip()
+                        # Eliminar el sufijo " | Facebook" si existe
+                        title = title.replace(' | Facebook', '').strip()
+                        return title, platform
+                except Exception as e:
+                    logging.error(f"Error al obtener título de Facebook: {e}")
+                    return "Título no disponible", platform
+
+            return "Título no disponible", "Desconocido"
+        except Exception as e:
+            logging.error(f"Error al obtener título: {e}")
+            return "Título no disponible", "Desconocido"
+
+    def _extract_youtube_id(self, url: str) -> str:
+        """Extrae el ID de video de una URL de YouTube"""
+        try:
+            if 'youtu.be' in url:
+                return url.split('/')[-1]
+            
+            parsed_url = urlparse(url)
+            query_params = parse_qs(parsed_url.query)
+            if 'v' in query_params:
+                return query_params['v'][0]
+            
+            return ''
+        except:
+            return ''
+
+    def _save_streaming_url(self, url: str):
+        """Guarda una URL de streaming en la base de datos"""
+        try:
+            title, platform = self._get_content_title(url)
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            cursor.execute('INSERT INTO streaming_history (url, title, platform) VALUES (?, ?, ?)', 
+                         (url, title, platform))
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            logging.error(f"Error al guardar URL en la base de datos: {e}")
+
+    def get_streaming_history(self, limit: int = 10):
+        """Obtiene el historial de URLs de streaming"""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            cursor.execute('SELECT id, url, timestamp FROM streaming_history ORDER BY timestamp DESC LIMIT ?', (limit,))
+            results = cursor.fetchall()
+            conn.close()
+            return results
+        except Exception as e:
+            logging.error(f"Error al obtener historial: {e}")
+            return []
 
     def iniciar(self):
         signal.signal(SIGNAL_STREAMING, self.handler_streaming)
@@ -156,24 +291,10 @@ class Alterclip:
             logging.info("Programa terminado por el usuario.")
 
 
-# Cliente UDP para cambiar el modo
-def udp_client(mensaje: str):
-    dest_ip = "127.0.0.1"
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    try:
-        sock.sendto(mensaje.encode(), (dest_ip, UDP_PORT))
-        print(f"Enviando mensaje: {mensaje}")
-        datos, _ = sock.recvfrom(1024)
-        print(f"Respuesta del servidor: {datos.decode()}")
-    finally:
-        sock.close()
+
 
 
 if __name__ == "__main__":
-    if len(sys.argv) > 1:
-        udp_client("toggle")
-        sys.exit(0)
-
     app_name = "alterclip"
     log_dir = Path(user_log_dir(app_name))
     log_dir.mkdir(parents=True, exist_ok=True)
