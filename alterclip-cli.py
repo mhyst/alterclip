@@ -45,20 +45,20 @@ def play_streaming_url(url_id: int) -> None:
     except Exception as e:
         print(f"Error al reproducir URL: {e}", file=sys.stderr)
 
-def toggle_mode() -> None:
-    """Envía una señal UDP para cambiar el modo"""
+def udp_client(mensaje: str):
     dest_ip = "127.0.0.1"
-    port = 12345
-    message = "toggle"
-    
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        sock.sendto(message.encode(), (dest_ip, port))
-        data, _ = sock.recvfrom(1024)
-        print(f"Respuesta del servidor: {data.decode()}")
+        sock.sendto(mensaje.encode(), (dest_ip, 12345))
+        print(f"Enviando mensaje: {mensaje}")
+        datos, _ = sock.recvfrom(1024)
+        print(f"Respuesta del servidor: {datos.decode()}")
+    finally:
         sock.close()
-    except Exception as e:
-        print(f"Error al cambiar modo: {e}", file=sys.stderr)
+
+def toggle_mode() -> None:
+    udp_client("toggle")
+   
 
 def show_help() -> None:
     """Muestra información detallada sobre el uso de alterclip-cli"""
@@ -171,8 +171,5 @@ def main() -> None:
     elif args.command == 'play':
         play_streaming_url(args.id)
     
-    elif args.command == 'toggle':
-        toggle_mode()
-
 if __name__ == "__main__":
     main()
