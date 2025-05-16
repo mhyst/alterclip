@@ -153,23 +153,6 @@ def main() -> None:
     elif args.command == 'help':
         show_help()
     
-    if args.command == 'history':
-        history = get_streaming_history(args.limit)
-        if history:
-            print("\nHistorial de URLs de streaming:")
-            print("-" * 80)
-            for id, url, title, platform, timestamp in history:
-                print(f"ID: {id}")
-                print(f"URL: {url}")
-                print(f"Título: {title}")
-                print(f"Plataforma: {platform}")
-                print(f"Fecha: {timestamp}")
-                print("-" * 80)
-        else:
-            print("No hay historial disponible")
-    
-    elif args.command == 'play':
-        play_streaming_url(args.id)
     
 if __name__ == "__main__":
     main()
