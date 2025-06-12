@@ -108,6 +108,39 @@ def copy_streaming_url(url_id: int) -> None:
     except Exception as e:
         print(f"Error al copiar URL: {e}", file=sys.stderr)
 
+def remove_streaming_url(url_id: int) -> None:
+    """Elimina una URL de streaming del historial usando su ID"""
+    try:
+        conn = sqlite3.connect(get_db_path())
+        cursor = conn.cursor()
+        
+        # Primero obtenemos la URL para mostrar un mensaje de confirmación
+        cursor.execute('SELECT url FROM streaming_history WHERE id = ?', (url_id,))
+        result = cursor.fetchone()
+        
+        if not result:
+            print(f"No se encontró URL con ID {url_id}", file=sys.stderr)
+            return
+            
+        url = result[0]
+        print(f"¡Advertencia! Se va a eliminar la siguiente URL del historial:")
+        print(f"ID: {url_id}")
+        print(f"URL: {url}")
+        
+        # Preguntar confirmación
+        confirm = input("¿Estás seguro que quieres eliminar esta entrada? (s/n): ").lower()
+        if confirm != 's':
+            print("Operación cancelada")
+            return
+            
+        # Eliminar la entrada
+        cursor.execute('DELETE FROM streaming_history WHERE id = ?', (url_id,))
+        conn.commit()
+        conn.close()
+        print(f"Entrada con ID {url_id} eliminada del historial")
+    except Exception as e:
+        print(f"Error al eliminar URL: {e}", file=sys.stderr)
+
 def udp_client(mensaje: str):
     dest_ip = "127.0.0.1"
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -147,6 +180,10 @@ Comandos disponibles:
         Copia una URL de streaming al portapapeles con prefijo share.only/
         ID: Identificador numérico de la URL en el historial. Si no se especifica, se copiará el último video (-1)
 
+    rm [ID]
+        Elimina una entrada del historial
+        ID: Identificador numérico de la entrada a eliminar
+
     toggle
         Cambia el modo de alterclip entre streaming y offline
         En modo streaming: alterclip reproducirá automáticamente las URLs de streaming
@@ -182,6 +219,9 @@ Ejemplos:
     # Copiar el último video al portapapeles
     alterclip-cli copy
 
+    # Eliminar una entrada con ID 123
+    alterclip-cli rm 123
+
     # Cambiar el modo de alterclip
     alterclip-cli toggle
 """)
@@ -202,6 +242,10 @@ def main() -> None:
     # Subparser para copiar
     copy_parser = subparsers.add_parser('copy', help='Copiar URL de streaming al portapapeles con prefijo share.only/')
     copy_parser.add_argument('id', type=int, default=-1, nargs='?', help='ID de la URL a copiar. Si no se especifica, se copiará el último video (-1)')
+    
+    # Subparser para eliminar
+    rm_parser = subparsers.add_parser('rm', help='Eliminar una entrada del historial')
+    rm_parser.add_argument('id', type=int, help='ID de la entrada a eliminar')
     
     # Subparser para toggle
     subparsers.add_parser('toggle', help='Cambiar modo entre streaming y offline')
@@ -231,6 +275,9 @@ def main() -> None:
     
     elif args.command == 'copy':
         copy_streaming_url(args.id)
+    
+    elif args.command == 'rm':
+        remove_streaming_url(args.id)
     
     elif args.command == 'toggle':
         toggle_mode()
