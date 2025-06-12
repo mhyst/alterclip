@@ -8,22 +8,59 @@ from pathlib import Path
 from platformdirs import user_log_dir
 import subprocess
 from typing import List, Tuple
+from unidecode import unidecode
 
 def get_db_path() -> Path:
     """Obtiene la ruta de la base de datos"""
     return Path(user_log_dir("alterclip")) / "streaming_history.db"
 
-def get_streaming_history(limit: int = 10, no_limit: bool = False) -> List[Tuple[int, str, str, str, str]]:
+def remove_accents(input_str: str) -> str:
+    """Elimina los acentos de una cadena de texto"""
+    replacements = {
+        'á': 'a', 'à': 'a', 'â': 'a', 'ä': 'a', 'ã': 'a', 'å': 'a',
+        'é': 'e', 'è': 'e', 'ê': 'e', 'ë': 'e',
+        'í': 'i', 'ì': 'i', 'î': 'i', 'ï': 'i',
+        'ó': 'o', 'ò': 'o', 'ô': 'o', 'ö': 'o', 'õ': 'o',
+        'ú': 'u', 'ù': 'u', 'û': 'u', 'ü': 'u',
+        'ñ': 'n', 'ç': 'c',
+        'Á': 'A', 'À': 'A', 'Â': 'A', 'Ä': 'A', 'Ã': 'A', 'Å': 'A',
+        'É': 'E', 'È': 'E', 'Ê': 'E', 'Ë': 'E',
+        'Í': 'I', 'Ì': 'I', 'Î': 'I', 'Ï': 'I',
+        'Ó': 'O', 'Ò': 'O', 'Ô': 'O', 'Ö': 'O', 'Õ': 'O',
+        'Ú': 'U', 'Ù': 'U', 'Û': 'U', 'Ü': 'U',
+        'Ñ': 'N', 'Ç': 'C'
+    }
+    return ''.join(replacements.get(c, c) for c in input_str)
+
+def get_streaming_history(limit: int = 10, no_limit: bool = False, search: str = None) -> List[Tuple[int, str, str, str, str]]:
     """Obtiene el historial de URLs de streaming
     Si no_limit es True, muestra todo el historial
-    Si no_limit es False y limit es None, muestra 10 entradas por defecto"""
+    Si no_limit es False y limit es None, muestra 10 entradas por defecto
+    Si search no es None, muestra solo las entradas que contengan la cadena de búsqueda en el título
+    La búsqueda es insensible a acentos y mayúsculas/minúsculas"""
     try:
         conn = sqlite3.connect(get_db_path())
         cursor = conn.cursor()
-        if no_limit:
-            cursor.execute('SELECT id, url, title, platform, timestamp FROM streaming_history ORDER BY timestamp DESC')
-        else:
-            cursor.execute('SELECT id, url, title, platform, timestamp FROM streaming_history ORDER BY timestamp DESC LIMIT ?', (limit,))
+        
+        query = '''
+            SELECT id, url, title, platform, timestamp 
+            FROM streaming_history 
+            WHERE 1=1
+        '''
+        params = []
+        
+        if search:
+            # Eliminar acentos y convertir a minúsculas del término de búsqueda
+            search_term = remove_accents(search.lower())
+            # Eliminar acentos y convertir a minúsculas del título en la base de datos
+            query += ' AND LOWER(REPLACE(title, "á", "a")) LIKE ?'
+            params.append(f'%{search_term}%')
+        
+        if not no_limit:
+            query += ' ORDER BY timestamp DESC LIMIT ?'
+            params.append(limit)
+        
+        cursor.execute(query, params)
         results = cursor.fetchall()
         conn.close()
         return results
@@ -189,6 +226,10 @@ Comandos disponibles:
         En modo streaming: alterclip reproducirá automáticamente las URLs de streaming
         En modo offline: alterclip solo guardará las URLs para futura referencia
 
+    search [TERM]
+        Busca URLs en el historial por título
+        TERM: Término de búsqueda
+
     help
         Muestra esta ayuda detallada
 
@@ -224,7 +265,30 @@ Ejemplos:
 
     # Cambiar el modo de alterclip
     alterclip-cli toggle
+
+    # Buscar URLs en el historial por título
+    alterclip-cli search "título de búsqueda"
 """)
+
+def search_streaming_history(search_term: str) -> None:
+    """Busca URLs de streaming en el historial que contengan la cadena de búsqueda en el título"""
+    try:
+        results = get_streaming_history(search=search_term)
+        if not results:
+            print(f"No se encontraron resultados para '{search_term}'")
+            return
+            
+        print(f"\nResultados de búsqueda para '{search_term}':")
+        print("-" * 80)
+        for id, url, title, platform, timestamp in results:
+            print(f"ID: {id}")
+            print(f"URL: {url}")
+            print(f"Título: {title}")
+            print(f"Plataforma: {platform}")
+            print(f"Fecha: {timestamp}")
+            print("-" * 80)
+    except Exception as e:
+        print(f"Error al buscar en el historial: {e}", file=sys.stderr)
 
 def main() -> None:
     parser = argparse.ArgumentParser(description='Interfaz de línea de comandos para alterclip')
@@ -246,6 +310,10 @@ def main() -> None:
     # Subparser para eliminar
     rm_parser = subparsers.add_parser('rm', help='Eliminar una entrada del historial')
     rm_parser.add_argument('id', type=int, help='ID de la entrada a eliminar')
+    
+    # Subparser para buscar
+    search_parser = subparsers.add_parser('search', help='Buscar URLs en el historial por título')
+    search_parser.add_argument('term', type=str, help='Término de búsqueda')
     
     # Subparser para toggle
     subparsers.add_parser('toggle', help='Cambiar modo entre streaming y offline')
@@ -278,6 +346,9 @@ def main() -> None:
     
     elif args.command == 'rm':
         remove_streaming_url(args.id)
+    
+    elif args.command == 'search':
+        search_streaming_history(args.term)
     
     elif args.command == 'toggle':
         toggle_mode()
