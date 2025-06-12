@@ -74,6 +74,23 @@ def copy_streaming_url(url_id: int) -> None:
     try:
         conn = sqlite3.connect(get_db_path())
         cursor = conn.cursor()
+        
+        # Si el ID es negativo, lo convertimos a un ID absoluto
+        if url_id < 0:
+            # Obtener el total de entradas
+            cursor.execute('SELECT COUNT(*) FROM streaming_history')
+            total_entries = cursor.fetchone()[0]
+            if total_entries == 0:
+                print("No hay entradas en el historial", file=sys.stderr)
+                return
+                
+            # Convertir ID relativo a absoluto
+            abs_id = total_entries + url_id + 1
+            if abs_id <= 0:
+                print(f"No se puede reproducir una entrada más allá del inicio del historial", file=sys.stderr)
+                return
+            url_id = abs_id
+        
         cursor.execute('SELECT url FROM streaming_history WHERE id = ?', (url_id,))
         result = cursor.fetchone()
         conn.close()
@@ -86,7 +103,7 @@ def copy_streaming_url(url_id: int) -> None:
         # Añadir prefijo share.only/ a la URL
         share_url = f"share.only/{url}"
         # Usar xclip para copiar al portapapeles
-        subprocess.run(['xclip', '-selection', 'clipboard'], input=share_url.encode(), text=True)
+        subprocess.run(['xclip', '-selection', 'clipboard'], input=share_url, text=True)
         print(f"URL copiada al portapapeles: {share_url}")
     except Exception as e:
         print(f"Error al copiar URL: {e}", file=sys.stderr)
