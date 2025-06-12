@@ -104,8 +104,13 @@ class Alterclip:
         return any(source in url for source in self.streaming_sources)
 
     def interceptar_cambiar_url(self, cadena: str) -> str:
-        if '\n' in cadena or not cadena.startswith(('http://', 'https://')):
+        """Intercepta y modifica las URLs según sea necesario"""
+        if '\n' in cadena or not cadena.startswith(('http://', 'https://', 'share.only/')):
             return cadena
+
+        # Si es una URL con prefijo share.only/, devolver la URL sin el prefijo
+        if cadena.startswith('share.only/'):  # Prefijo para URLs de copia
+            return cadena[11:]  # Eliminamos el prefijo share.only/
 
         # Si es una URL de streaming, la guardamos en la base de datos
         if self.es_streaming_compatible(cadena):
@@ -116,6 +121,7 @@ class Alterclip:
                 self.reproducir_streaming(cadena)
                 return cadena
 
+        # Si no es streaming ni de copia, aplicamos los reemplazos normales
         for original, nuevo in self.reemplazos.items():
             if original in cadena:
                 return cadena.replace(original, nuevo)
