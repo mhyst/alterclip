@@ -14,6 +14,10 @@
 - 📦 Compatible con Linux, macOS y Windows (con pequeñas adaptaciones).
 - 🔧 Dos modos de funcionamiento con cambio dinámico mediante señales.
 - 📊 Interfaz de línea de comandos para gestionar el historial y reproducir vídeos guardados.
+- 🔍 Búsqueda avanzada en el historial con soporte para acentos y mayúsculas/minúsculas.
+- 📋 Copia de URLs al portapapeles con prefijo share.only/ para compartir fácilmente.
+- 🗑️ Eliminación de entradas del historial.
+- 🔄 Soporte para índices relativos al reproducir vídeos (ejemplo: -1 = último, -2 = penúltimo).
 
 ---
 
@@ -53,8 +57,10 @@
 
 El CLI (`alterclip-cli.py`) te permite:
 
-- Ver el historial de vídeos reproducidos
-- Reproducir cualquier vídeo guardado
+- Ver el historial de vídeos reproducidos con búsqueda avanzada
+- Reproducir cualquier vídeo guardado usando índices absolutos o relativos
+- Copiar URLs al portapapeles con prefijo share.only/ para compartir
+- Eliminar entradas del historial
 - Cambiar el modo de funcionamiento
 
 Ejemplos de uso:
@@ -66,8 +72,17 @@ Ejemplos de uso:
 # Ver solo las últimas 5 entradas
 ./alterclip-cli history --limit 5
 
-# Reproducir un vídeo guardado por su ID
-./alterclip-cli play 123
+# Buscar vídeos en el historial que contengan "música"
+./alterclip-cli search música
+
+# Reproducir el último vídeo guardado
+./alterclip-cli play -1
+
+# Copiar la URL del penúltimo vídeo al portapapeles
+./alterclip-cli copy -2
+
+# Eliminar el vídeo con ID 123
+./alterclip-cli remove 123
 
 # Cambiar el modo de alterclip
 ./alterclip-cli toggle
@@ -237,9 +252,6 @@ gtk-launch alterclip
 
 ---
 
-
----
-
 ## 📝 Licencia
 
 Este proyecto está licenciado bajo la [GNU GPL v3](https://www.gnu.org/licenses/gpl-3.0.html).
@@ -250,5 +262,3 @@ Este proyecto está licenciado bajo la [GNU GPL v3](https://www.gnu.org/licenses
 
 Creado por [mhyst].  
 Inspirado en la necesidad de compartir enlaces sin bloqueos ni rastreadores.
-
-

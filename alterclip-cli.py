@@ -124,7 +124,7 @@ def copy_streaming_url(url_id: int) -> None:
             # Convertir ID relativo a absoluto
             abs_id = total_entries + url_id + 1
             if abs_id <= 0:
-                print(f"No se puede reproducir una entrada más allá del inicio del historial", file=sys.stderr)
+                print(f"No se puede copiar una entrada más allá del inicio del historial", file=sys.stderr)
                 return
             url_id = abs_id
         
