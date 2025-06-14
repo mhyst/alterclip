@@ -159,6 +159,53 @@ class Alterclip:
                     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
                 )
             ''')
+            
+            # Tabla para tags
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS tags (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL,
+                    description TEXT,
+                    UNIQUE(name)
+                )
+            ''')
+            
+            # Tabla para la jerarquía de tags
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS tag_hierarchy (
+                    parent_id INTEGER,
+                    child_id INTEGER,
+                    FOREIGN KEY (parent_id) REFERENCES tags(id),
+                    FOREIGN KEY (child_id) REFERENCES tags(id),
+                    UNIQUE(parent_id, child_id)
+                )
+            ''')
+            
+            # Tabla para asociar URLs con tags
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS url_tags (
+                    url_id INTEGER,
+                    tag_id INTEGER,
+                    FOREIGN KEY (url_id) REFERENCES streaming_history(id),
+                    FOREIGN KEY (tag_id) REFERENCES tags(id),
+                    UNIQUE(url_id, tag_id)
+                )
+            ''')
+            
+            # Crear índices para optimizar las búsquedas recursivas
+            cursor.execute('''
+                CREATE INDEX IF NOT EXISTS idx_tag_hierarchy_parent ON tag_hierarchy(parent_id)
+            ''')
+            cursor.execute('''
+                CREATE INDEX IF NOT EXISTS idx_tag_hierarchy_child ON tag_hierarchy(child_id)
+            ''')
+            cursor.execute('''
+                CREATE INDEX IF NOT EXISTS idx_url_tags_url ON url_tags(url_id)
+            ''')
+            cursor.execute('''
+                CREATE INDEX IF NOT EXISTS idx_url_tags_tag ON url_tags(tag_id)
+            ''')
+            
             conn.commit()
             conn.close()
         except Exception as e:

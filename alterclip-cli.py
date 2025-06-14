@@ -9,10 +9,20 @@ from platformdirs import user_log_dir
 import subprocess
 from typing import List, Tuple
 from unidecode import unidecode
+import argcomplete
 
 def get_db_path() -> Path:
     """Obtiene la ruta de la base de datos"""
     return Path(user_log_dir("alterclip")) / "streaming_history.db"
+
+# Crear la conexión a la base de datos
+def create_connection() -> sqlite3.Connection:
+    """Crea una conexión a la base de datos"""
+    conn = sqlite3.connect(get_db_path())
+    return conn
+
+# Función para obtener la conexión global
+conn = create_connection()
 
 def remove_accents(input_str: str) -> str:
     """Elimina los acentos de una cadena de texto"""
@@ -32,48 +42,192 @@ def remove_accents(input_str: str) -> str:
     }
     return ''.join(replacements.get(c, c) for c in input_str)
 
-def get_streaming_history(limit: int = 10, no_limit: bool = False, search: str = None) -> List[Tuple[int, str, str, str, str]]:
-    """Obtiene el historial de URLs de streaming
+def format_history_entry(entry: Tuple[int, str, str, str, str, List[str]]) -> str:
+    """Formatea una entrada del historial para mostrar en la salida"""
+    id, url, title, platform, timestamp, tags = entry
+    
+    # Convertir cada tag a su jerarquía completa
+    formatted_tags = []
+    for tag in tags:
+        hierarchy = get_tag_hierarchy(tag)
+        formatted_tags.append(hierarchy)
+    
+    return f"""
+ID: {id}
+URL: {url}
+Título: {title}
+Plataforma: {platform}
+Fecha: {timestamp}
+Tags: {', '.join(formatted_tags)}
+{'-' * 80}"""
+
+def get_streaming_history(limit: int = 10, no_limit: bool = False, search: str = None, tags: List[str] = None) -> None:
+    """Obtiene el historial de URLs de streaming con sus tags asociados
     Si no_limit es True, muestra todo el historial
     Si no_limit es False y limit es None, muestra 10 entradas por defecto
     Si search no es None, muestra solo las entradas que contengan la cadena de búsqueda en el título
-    La búsqueda es insensible a acentos y mayúsculas/minúsculas"""
+    Si tags no es None, muestra solo las entradas que tengan al menos uno de los tags especificados
+    También muestra URLs relacionadas con tags hijos y padres de los especificados"""
     try:
-        conn = sqlite3.connect(get_db_path())
         cursor = conn.cursor()
         
         query = '''
-            SELECT id, url, title, platform, timestamp 
-            FROM streaming_history 
-            WHERE 1=1
+            SELECT 
+                sh.id, 
+                sh.url, 
+                sh.title, 
+                sh.platform, 
+                sh.timestamp,
+                GROUP_CONCAT(t.name) as tags
+            FROM streaming_history sh
+            LEFT JOIN url_tags ut ON sh.id = ut.url_id
+            LEFT JOIN tags t ON ut.tag_id = t.id
         '''
+        
         params = []
+        conditions = []
         
         if search:
-            # Eliminar acentos y convertir a minúsculas del término de búsqueda
-            search_term = remove_accents(search.lower())
-            # Eliminar acentos y convertir a minúsculas del título en la base de datos
-            query += ' AND LOWER(REPLACE(title, "á", "a")) LIKE ?'
-            params.append(f'%{search_term}%')
+            search_term = f'%{remove_accents(search.lower())}%'
+            conditions.append('(LOWER(sh.title) LIKE ? OR LOWER(sh.url) LIKE ?)')
+            params.extend([search_term, search_term])
+        
+        if tags:
+            # Obtener IDs de los tags, sus hijos y sus padres
+            tag_ids = []
+            for tag in tags:
+                tag_id = get_tag_id(tag)
+                if tag_id:
+                    tag_ids.append(tag_id)
+                    
+                    # Obtener IDs de los tags hijos
+                    cursor.execute('''
+                        SELECT child_id 
+                        FROM tag_hierarchy 
+                        WHERE parent_id = ?
+                    ''', (tag_id,))
+                    child_ids = cursor.fetchall()
+                    tag_ids.extend([child[0] for child in child_ids])
+                    
+                    # Obtener IDs de los tags padres
+                    cursor.execute('''
+                        WITH RECURSIVE parent_tags(id) AS (
+                            SELECT parent_id FROM tag_hierarchy WHERE child_id = ?
+                            UNION ALL
+                            SELECT th.parent_id FROM tag_hierarchy th
+                            JOIN parent_tags pt ON th.child_id = pt.id
+                        )
+                        SELECT id FROM parent_tags
+                    ''', (tag_id,))
+                    parent_ids = cursor.fetchall()
+                    tag_ids.extend([parent[0] for parent in parent_ids])
+            
+            if tag_ids:
+                # Convertir la lista de IDs a una cadena SQL
+                tag_ids_str = ','.join('?' for _ in tag_ids)
+                conditions.append(f'sh.id IN (SELECT url_id FROM url_tags WHERE tag_id IN ({tag_ids_str}))')
+                params.extend(tag_ids)
+        
+        if conditions:
+            query += ' WHERE ' + ' AND '.join(conditions)
+        
+        query += ' GROUP BY sh.id, sh.url, sh.title, sh.platform, sh.timestamp'
         
         if not no_limit:
-            query += ' ORDER BY timestamp DESC LIMIT ?'
-            params.append(limit)
+            query += ' ORDER BY sh.timestamp DESC LIMIT ?'
+            params.append(limit if limit else 10)
         
         cursor.execute(query, params)
-        results = cursor.fetchall()
-        conn.close()
-        return results
+        
+        history = []
+        for row in cursor.fetchall():
+            tags = row[5].split(',') if row[5] else []
+            history.append((row[0], row[1], row[2], row[3], row[4], tags))
+        
+        if not history:
+            print("No hay historial disponible")
+            return
+            
+        print("\nHistorial de URLs de streaming:")
+        print("-" * 80)
+        for entry in history:
+            print(format_history_entry(entry))
+        
     except Exception as e:
-        print(f"Error al obtener historial: {e}", file=sys.stderr)
-        return []
+        print(f"Error al obtener el historial: {e}")
+
+def add_tag(name: str, parent_name: str = None, description: str = None) -> int:
+    """Añade un nuevo tag y devuelve su ID
+    name: Nombre del tag (se mantendrá exactamente como se ingresa)
+    parent_name: Nombre del tag padre (opcional)
+    description: Descripción del tag (opcional)"""
+    try:
+        cursor = conn.cursor()
+        
+        # Insertar el tag
+        cursor.execute('''
+            INSERT INTO tags (name, description)
+            VALUES (?, ?)
+        ''', (name, description))
+        tag_id = cursor.lastrowid
+        
+        # Si se especifica un tag padre, crear la relación
+        if parent_name:
+            cursor.execute('''
+                SELECT id FROM tags WHERE name = ?
+            ''', (parent_name,))
+            parent = cursor.fetchone()
+            if parent:
+                cursor.execute('''
+                    INSERT INTO tag_hierarchy (parent_id, child_id)
+                    VALUES (?, ?)
+                ''', (parent[0], tag_id))
+            else:
+                print(f"Error: El tag padre '{parent_name}' no existe")
+                conn.rollback()
+                return None
+        
+        conn.commit()
+        return tag_id
+    except sqlite3.IntegrityError:
+        print(f"Error: El tag '{name}' ya existe")
+        return None
+
+def get_tag_id(name: str) -> int:
+    """Obtiene el ID de un tag por su nombre
+    La búsqueda es sensible a mayúsculas/minúsculas y acentos"""
+    cursor = conn.cursor()
+    
+    cursor.execute('SELECT id FROM tags WHERE name = ?', (name,))
+    result = cursor.fetchone()
+    
+    return result[0] if result else None
+
+def add_tag_to_url(url_id: int, tag_name: str):
+    """Asocia un tag con una URL específica"""
+    try:
+        cursor = conn.cursor()
+        
+        tag_id = get_tag_id(tag_name)
+        if not tag_id:
+            print(f"Error: El tag '{tag_name}' no existe")
+            return False
+        
+        cursor.execute('''
+            INSERT INTO url_tags (url_id, tag_id)
+            VALUES (?, ?)
+        ''', (url_id, tag_id))
+        conn.commit()
+        return True
+    except sqlite3.IntegrityError:
+        print(f"Error: La URL ya tiene el tag '{tag_name}'")
+        return False
 
 def play_streaming_url(url_id: int) -> None:
     """Reproduce una URL de streaming por su ID (absoluto o relativo)
     Si el ID es negativo, se interpreta como un índice relativo desde el final
     (ejemplo: -1 = último, -2 = penúltimo, etc.)"""
     try:
-        conn = sqlite3.connect(get_db_path())
         cursor = conn.cursor()
         
         # Si el ID es negativo, lo convertimos a un ID absoluto
@@ -94,7 +248,6 @@ def play_streaming_url(url_id: int) -> None:
         
         cursor.execute('SELECT url FROM streaming_history WHERE id = ?', (url_id,))
         result = cursor.fetchone()
-        conn.close()
         
         if not result:
             print(f"No se encontró URL con ID {url_id}", file=sys.stderr)
@@ -109,7 +262,6 @@ def play_streaming_url(url_id: int) -> None:
 def copy_streaming_url(url_id: int) -> None:
     """Copia una URL de streaming al portapapeles con prefijo share.only/ usando su ID"""
     try:
-        conn = sqlite3.connect(get_db_path())
         cursor = conn.cursor()
         
         # Si el ID es negativo, lo convertimos a un ID absoluto
@@ -130,7 +282,6 @@ def copy_streaming_url(url_id: int) -> None:
         
         cursor.execute('SELECT url FROM streaming_history WHERE id = ?', (url_id,))
         result = cursor.fetchone()
-        conn.close()
         
         if not result:
             print(f"No se encontró URL con ID {url_id}", file=sys.stderr)
@@ -148,7 +299,6 @@ def copy_streaming_url(url_id: int) -> None:
 def remove_streaming_url(url_id: int) -> None:
     """Elimina una URL de streaming del historial usando su ID"""
     try:
-        conn = sqlite3.connect(get_db_path())
         cursor = conn.cursor()
         
         # Primero obtenemos la URL para mostrar un mensaje de confirmación
@@ -173,7 +323,6 @@ def remove_streaming_url(url_id: int) -> None:
         # Eliminar la entrada
         cursor.execute('DELETE FROM streaming_history WHERE id = ?', (url_id,))
         conn.commit()
-        conn.close()
         print(f"Entrada con ID {url_id} eliminada del historial")
     except Exception as e:
         print(f"Error al eliminar URL: {e}", file=sys.stderr)
@@ -230,6 +379,34 @@ Comandos disponibles:
         Busca URLs en el historial por título
         TERM: Término de búsqueda
 
+    tag [acción] [opciones]
+        Gestiona tags para organizar el historial
+        Acciones disponibles:
+            add [nombre] [--parent [padre]] [--description [descripción]]
+                Añade un nuevo tag
+                nombre: Nombre del tag
+                padre: Nombre del tag padre (opcional)
+                descripción: Descripción del tag (opcional)
+            url [ID] [nombre]
+                Asocia un tag con una URL
+                ID: Identificador numérico de la URL
+                nombre: Nombre del tag a asociar
+            list
+                Lista todos los tags
+            hierarchy
+                Muestra la jerarquía completa de tags
+            rm [nombre]
+                Elimina un tag
+                nombre: Nombre del tag a eliminar
+            update [nombre] [--new-name [nuevo_nombre]] [--description [nueva_descripción]]
+                Actualiza un tag
+                nombre: Nombre actual del tag
+                nuevo_nombre: Nuevo nombre para el tag
+                nueva_descripción: Nueva descripción del tag
+            get-hierarchy [nombre]
+                Obtiene la jerarquía de un tag
+                nombre: Nombre del tag
+
     help
         Muestra esta ayuda detallada
 
@@ -268,94 +445,361 @@ Ejemplos:
 
     # Buscar URLs en el historial por título
     alterclip-cli search "título de búsqueda"
+
+    # Añadir un nuevo tag
+    alterclip-cli tag add "nombre del tag"
+
+    # Asociar un tag con una URL
+    alterclip-cli tag url 123 "nombre del tag"
+
+    # Lista todos los tags
+    alterclip-cli tag list
+
+    # Muestra la jerarquía completa de tags
+    alterclip-cli tag hierarchy
+
+    # Elimina un tag
+    alterclip-cli tag rm "nombre del tag"
+
+    # Actualiza un tag
+    alterclip-cli tag update "nombre del tag" --new-name "nuevo nombre del tag"
+
+    # Obtiene la jerarquía de un tag
+    alterclip-cli tag get-hierarchy "nombre del tag"
 """)
 
 def search_streaming_history(search_term: str) -> None:
     """Busca URLs de streaming en el historial que contengan la cadena de búsqueda en el título"""
     try:
-        results = get_streaming_history(search=search_term)
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT 
+                sh.id, 
+                sh.url, 
+                sh.title, 
+                sh.platform, 
+                sh.timestamp,
+                GROUP_CONCAT(t.name) as tags
+            FROM streaming_history sh
+            LEFT JOIN url_tags ut ON sh.id = ut.url_id
+            LEFT JOIN tags t ON ut.tag_id = t.id
+            WHERE LOWER(sh.title) LIKE ?
+        ''', (f'%{remove_accents(search_term.lower())}%',))
+        
+        results = cursor.fetchall()
+        
         if not results:
             print(f"No se encontraron resultados para '{search_term}'")
             return
             
         print(f"\nResultados de búsqueda para '{search_term}':")
         print("-" * 80)
-        for id, url, title, platform, timestamp in results:
+        for id, url, title, platform, timestamp, tags in results:
             print(f"ID: {id}")
             print(f"URL: {url}")
             print(f"Título: {title}")
             print(f"Plataforma: {platform}")
             print(f"Fecha: {timestamp}")
+            print(f"Tags: {', '.join(tags.split(',') if tags else [])}")
             print("-" * 80)
     except Exception as e:
         print(f"Error al buscar en el historial: {e}", file=sys.stderr)
 
+def list_tags() -> None:
+    """Lista todos los tags"""
+    try:
+        cursor = conn.cursor()
+        
+        cursor.execute('SELECT name FROM tags')
+        
+        tags = [row[0] for row in cursor.fetchall()]
+        
+        if not tags:
+            print("No hay tags disponibles")
+            return
+            
+        print("\nTags disponibles:")
+        print("-" * 80)
+        for tag in tags:
+            print(tag)
+        print("-" * 80)
+    except Exception as e:
+        print(f"Error al listar tags: {e}", file=sys.stderr)
+
+def show_tag_hierarchy() -> None:
+    """Muestra la jerarquía completa de tags"""
+    try:
+        cursor = conn.cursor()
+        
+        # Función auxiliar para obtener los hijos de un tag
+        def get_children(tag_id):
+            cursor.execute('''
+                SELECT t.name, t.id
+                FROM tags t
+                JOIN tag_hierarchy th ON t.id = th.child_id
+                WHERE th.parent_id = ?
+                ORDER BY t.name
+            ''', (tag_id,))
+            return cursor.fetchall()
+        
+        # Obtener todos los tags raíz
+        cursor.execute('''
+            SELECT t.name, t.id
+            FROM tags t
+            WHERE t.id NOT IN (SELECT child_id FROM tag_hierarchy)
+            ORDER BY t.name
+        ''')
+        root_tags = cursor.fetchall()
+        
+        if not root_tags:
+            print("No hay jerarquía de tags disponible")
+            return
+            
+        print("\nJerarquía de tags:")
+        print("-" * 80)
+        
+        # Función auxiliar para mostrar la jerarquía con espaciado
+        def print_hierarchy(tag_name, tag_id, level=0):
+            print(f"{'  ' * level}- {tag_name}")
+            children = get_children(tag_id)
+            for child_name, child_id in children:
+                print_hierarchy(child_name, child_id, level + 1)
+        
+        # Mostrar la jerarquía
+        for tag_name, tag_id in root_tags:
+            print_hierarchy(tag_name, tag_id)
+        
+        print("-" * 80)
+    except Exception as e:
+        print(f"Error al mostrar jerarquía de tags: {e}", file=sys.stderr)
+
+def remove_tag(name: str) -> None:
+    """Elimina un tag"""
+    try:
+        cursor = conn.cursor()
+        
+        # Primero obtenemos el ID del tag
+        cursor.execute('SELECT id FROM tags WHERE name = ?', (name,))
+        result = cursor.fetchone()
+        
+        if not result:
+            print(f"No se encontró tag con nombre '{name}'")
+            return
+            
+        tag_id = result[0]
+        
+        # Eliminar el tag
+        cursor.execute('DELETE FROM tags WHERE id = ?', (tag_id,))
+        conn.commit()
+        print(f"Tag '{name}' eliminado")
+    except Exception as e:
+        print(f"Error al eliminar tag: {e}", file=sys.stderr)
+
+def update_tag(name: str, new_name: str = None, description: str = None) -> None:
+    """Actualiza un tag"""
+    try:
+        cursor = conn.cursor()
+        
+        # Primero obtenemos el ID del tag
+        cursor.execute('SELECT id FROM tags WHERE name = ?', (name,))
+        result = cursor.fetchone()
+        
+        if not result:
+            print(f"No se encontró tag con nombre '{name}'")
+            return
+            
+        tag_id = result[0]
+        
+        # Actualizar el tag
+        if new_name:
+            cursor.execute('UPDATE tags SET name = ? WHERE id = ?', (new_name, tag_id))
+        if description:
+            cursor.execute('UPDATE tags SET description = ? WHERE id = ?', (description, tag_id))
+        conn.commit()
+        print(f"Tag '{name}' actualizado")
+    except Exception as e:
+        print(f"Error al actualizar tag: {e}", file=sys.stderr)
+
+def get_tag_hierarchy(tag_name: str) -> str:
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('SELECT id FROM tags WHERE name = ?', (tag_name,))
+        result = cursor.fetchone()
+        if not result:
+            return tag_name
+            
+        tag_id = result[0]
+        hierarchy = []
+        current_id = tag_id
+        
+        while True:
+            cursor.execute('SELECT parent_id FROM tag_hierarchy WHERE child_id = ?', (current_id,))
+            result = cursor.fetchone()
+            if not result:
+                break
+                
+            parent_id = result[0]
+            cursor.execute('SELECT name FROM tags WHERE id = ?', (parent_id,))
+            parent_name = cursor.fetchone()[0]
+            hierarchy.append(parent_name)
+            current_id = parent_id
+        
+        hierarchy.reverse()
+        hierarchy.append(tag_name)
+        
+        return ' > '.join(hierarchy)
+        
+    except Exception as e:
+        print(f"Error al obtener jerarquía del tag: {e}", file=sys.stderr)
+        return tag_name
+
+def get_available_tags() -> List[str]:
+    """Obtiene la lista de tags disponibles en la base de datos"""
+    try:
+        cursor = conn.cursor()
+        cursor.execute('SELECT name FROM tags ORDER BY name')
+        return [row[0] for row in cursor.fetchall()]
+    except:
+        return []
+
+def get_tag_parents(tag_name: str) -> List[str]:
+    """Obtiene los posibles padres para un tag"""
+    try:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT t.name
+            FROM tags t
+            WHERE t.id NOT IN (
+                SELECT parent_id FROM tag_hierarchy WHERE child_id = 
+                (SELECT id FROM tags WHERE name = ?)
+            )
+            ORDER BY t.name
+        ''', (tag_name,))
+        return [row[0] for row in cursor.fetchall()]
+    except:
+        return []
+
+def autocomplete_tags(prefix, parsed_args, **kwargs):
+    """Función de autocompletado para tags"""
+    return [tag for tag in get_available_tags() if tag.startswith(prefix)]
+
+def autocomplete_tag_parents(prefix, parsed_args, **kwargs):
+    """Función de autocompletado para padres de tags"""
+    if parsed_args.name:
+        return [tag for tag in get_tag_parents(parsed_args.name) if tag.startswith(prefix)]
+    return []
+
 def main() -> None:
-    parser = argparse.ArgumentParser(description='Interfaz de línea de comandos para alterclip')
-    subparsers = parser.add_subparsers(dest='command', required=True)
+    parser = argparse.ArgumentParser(
+        description='Gestiona el historial de URLs de streaming y sus tags',
+        formatter_class=argparse.RawTextHelpFormatter
+    )
     
-    # Subparser para historial
-    history_parser = subparsers.add_parser('history', help='Ver historial de URLs de streaming')
-    history_parser.add_argument('--limit', type=int, default=10, help='Número de entradas a mostrar')
-    history_parser.add_argument('--no-limit', action='store_true', help='Muestra todo el historial sin límite')
+    # Configurar autocompletado
+    argcomplete.autocomplete(parser)
     
-    # Subparser para reproducir
-    play_parser = subparsers.add_parser('play', help='Reproducir URL de streaming por ID')
-    play_parser.add_argument('id', type=int, default=-1, nargs='?', help='ID de la URL a reproducir. Si no se especifica, se reproducirá el último video (-1)')
+    subparsers = parser.add_subparsers(dest='command', help='Comandos disponibles')
     
-    # Subparser para copiar
-    copy_parser = subparsers.add_parser('copy', help='Copiar URL de streaming al portapapeles con prefijo share.only/')
-    copy_parser.add_argument('id', type=int, default=-1, nargs='?', help='ID de la URL a copiar. Si no se especifica, se copiará el último video (-1)')
+    # Comandos existentes
+    parser_play = subparsers.add_parser('play', help='Reproduce una URL de streaming')
+    parser_play.add_argument('id', type=int, help='ID de la URL a reproducir')
     
-    # Subparser para eliminar
-    rm_parser = subparsers.add_parser('rm', help='Eliminar una entrada del historial')
-    rm_parser.add_argument('id', type=int, help='ID de la entrada a eliminar')
+    parser_copy = subparsers.add_parser('copy', help='Copia una URL de streaming al portapapeles')
+    parser_copy.add_argument('id', type=int, help='ID de la URL a copiar')
     
-    # Subparser para buscar
-    search_parser = subparsers.add_parser('search', help='Buscar URLs en el historial por título')
-    search_parser.add_argument('term', type=str, help='Término de búsqueda')
+    parser_rm = subparsers.add_parser('rm', help='Elimina una URL del historial')
+    parser_rm.add_argument('id', type=int, help='ID de la URL a eliminar')
     
-    # Subparser para toggle
-    subparsers.add_parser('toggle', help='Cambiar modo entre streaming y offline')
+    parser_search = subparsers.add_parser('search', help='Busca URLs en el historial')
+    parser_search.add_argument('term', help='Término de búsqueda')
     
-    # Subparser para help
-    subparsers.add_parser('help', help='Muestra esta ayuda detallada')
+    parser_toggle = subparsers.add_parser('toggle', help='Alterna entre modo normal y modo alterclip')
+    
+    parser_hist = subparsers.add_parser('hist', help='Muestra el historial de URLs')
+    parser_hist.add_argument('--limit', type=int, help='Número de entradas a mostrar')
+    parser_hist.add_argument('--no-limit', action='store_true', help='Muestra todo el historial')
+    parser_hist.add_argument('--search', help='Filtro de búsqueda en el título o URL')
+    parser_hist.add_argument('--tags', nargs='*', help='Filtro de búsqueda por tags')
+    
+    # Comandos para gestionar tags
+    parser_tag = subparsers.add_parser('tag', help='Gestiona tags para organizar el historial')
+    tag_subparsers = parser_tag.add_subparsers(dest='action', help='Acciones disponibles para tags')
+    
+    # Comando para crear un tag
+    parser_tag_add = tag_subparsers.add_parser('add', help='Añade un nuevo tag')
+    parser_tag_add.add_argument('name', help='Nombre del tag').completer = autocomplete_tags
+    parser_tag_add.add_argument('--parent', help='Nombre del tag padre (opcional)').completer = autocomplete_tag_parents
+    parser_tag_add.add_argument('--description', help='Descripción del tag (opcional)')
+    
+    # Comando para asociar un tag con una URL
+    parser_tag_url = tag_subparsers.add_parser('url', help='Asocia un tag con una URL')
+    parser_tag_url.add_argument('url_id', type=int, help='ID de la URL')
+    parser_tag_url.add_argument('tag_name', help='Nombre del tag a asociar').completer = autocomplete_tags
+    
+    # Comando para listar tags
+    parser_tag_list = tag_subparsers.add_parser('list', help='Lista todos los tags')
+    
+    # Comando para mostrar jerarquía de tags
+    parser_tag_hierarchy = tag_subparsers.add_parser('hierarchy', help='Muestra la jerarquía completa de tags')
+    
+    # Comando para eliminar un tag
+    parser_tag_rm = tag_subparsers.add_parser('rm', help='Elimina un tag')
+    parser_tag_rm.add_argument('name', help='Nombre del tag a eliminar').completer = autocomplete_tags
+    
+    # Comando para actualizar un tag
+    parser_tag_update = tag_subparsers.add_parser('update', help='Actualiza un tag')
+    parser_tag_update.add_argument('name', help='Nombre actual del tag').completer = autocomplete_tags
+    parser_tag_update.add_argument('--new-name', help='Nuevo nombre para el tag')
+    parser_tag_update.add_argument('--description', help='Nueva descripción del tag')
+    
+    # Comando para mostrar jerarquía de un tag
+    parser_tag_get_hierarchy = tag_subparsers.add_parser('get-hierarchy', help='Obtiene la jerarquía de un tag')
+    parser_tag_get_hierarchy.add_argument('name', help='Nombre del tag')
+    
+    # Comando para mostrar ayuda
+    parser_help = subparsers.add_parser('help', help='Muestra esta ayuda')
     
     args = parser.parse_args()
     
-    if args.command == 'history':
-        history = get_streaming_history(args.limit, args.no_limit)
-        if history:
-            print("\nHistorial de URLs de streaming:")
-            print("-" * 80)
-            for id, url, title, platform, timestamp in history:
-                print(f"ID: {id}")
-                print(f"URL: {url}")
-                print(f"Título: {title}")
-                print(f"Plataforma: {platform}")
-                print(f"Fecha: {timestamp}")
-                print("-" * 80)
-        else:
-            print("No hay historial disponible")
-    
-    elif args.command == 'play':
-        play_streaming_url(args.id)
-    
-    elif args.command == 'copy':
-        copy_streaming_url(args.id)
-    
-    elif args.command == 'rm':
-        remove_streaming_url(args.id)
-    
-    elif args.command == 'search':
-        search_streaming_history(args.term)
-    
-    elif args.command == 'toggle':
-        toggle_mode()
-    
-    elif args.command == 'help':
-        show_help()
-    
-    
+    try:
+        if args.command == 'play':
+            play_streaming_url(args.id)
+        elif args.command == 'copy':
+            copy_streaming_url(args.id)
+        elif args.command == 'rm':
+            remove_streaming_url(args.id)
+        elif args.command == 'search':
+            search_streaming_history(args.term)
+        elif args.command == 'toggle':
+            toggle_mode()
+        elif args.command == 'hist':
+            get_streaming_history(
+                limit=args.limit,
+                no_limit=args.no_limit,
+                search=args.search,
+                tags=args.tags
+            )
+        elif args.command == 'tag':
+            if args.action == 'add':
+                add_tag(args.name, args.parent, args.description)
+            elif args.action == 'url':
+                add_tag_to_url(args.url_id, args.tag_name)
+            elif args.action == 'list':
+                list_tags()
+            elif args.action == 'hierarchy':
+                show_tag_hierarchy()
+            elif args.action == 'rm':
+                remove_tag(args.name)
+            elif args.action == 'update':
+                update_tag(args.name, args.new_name, args.description)
+            elif args.action == 'get-hierarchy':
+                print(get_tag_hierarchy(args.name))
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+
 if __name__ == "__main__":
     main()
+    conn.close()

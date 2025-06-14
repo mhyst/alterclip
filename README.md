@@ -18,6 +18,9 @@
 - 📋 Copia de URLs al portapapeles con prefijo share.only/ para compartir fácilmente.
 - 🗑️ Eliminación de entradas del historial.
 - 🔄 Soporte para índices relativos al reproducir vídeos (ejemplo: -1 = último, -2 = penúltimo).
+- 🏷️ Sistema de tags jerárquicos para organizar el historial.
+- 📊 Búsqueda por tags y sus relaciones (padres e hijos).
+- 📈 Visualización de jerarquía completa de tags.
 
 ---
 
@@ -62,15 +65,16 @@ El CLI (`alterclip-cli.py`) te permite:
 - Copiar URLs al portapapeles con prefijo share.only/ para compartir
 - Eliminar entradas del historial
 - Cambiar el modo de funcionamiento
+- Gestionar tags jerárquicos para organizar el historial
 
 Ejemplos de uso:
 
 ```bash
 # Ver historial completo
-./alterclip-cli history
+./alterclip-cli hist
 
 # Ver solo las últimas 5 entradas
-./alterclip-cli history --limit 5
+./alterclip-cli hist --limit 5
 
 # Buscar vídeos en el historial que contengan "música"
 ./alterclip-cli search música
@@ -82,10 +86,31 @@ Ejemplos de uso:
 ./alterclip-cli copy -2
 
 # Eliminar el vídeo con ID 123
-./alterclip-cli remove 123
+./alterclip-cli rm 123
 
 # Cambiar el modo de alterclip
 ./alterclip-cli toggle
+
+# Añadir un nuevo tag
+./alterclip-cli tag add "Arqueología" --description "Contenido relacionado con arqueología"
+
+# Crear un tag hijo
+./alterclip-cli tag add "Antiguas Civilizaciones" --parent "Arqueología"
+
+# Asociar un tag con una URL
+./alterclip-cli tag url 123 "Arqueología"
+
+# Ver la jerarquía completa de tags
+./alterclip-cli tag hierarchy
+
+# Buscar URLs con un tag específico
+./alterclip-cli hist --tags "Arqueología"
+
+# Actualizar un tag
+./alterclip-cli tag update "Arqueología" --new-name "Arqueología y Antigüedad"
+
+# Eliminar un tag
+./alterclip-cli tag rm "Arqueología"
 
 # Ver ayuda completa
 ./alterclip-cli help
