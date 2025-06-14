@@ -30,17 +30,25 @@ def remove_accents(input_str: str) -> str:
         'á': 'a', 'à': 'a', 'â': 'a', 'ä': 'a', 'ã': 'a', 'å': 'a',
         'é': 'e', 'è': 'e', 'ê': 'e', 'ë': 'e',
         'í': 'i', 'ì': 'i', 'î': 'i', 'ï': 'i',
-        'ó': 'o', 'ò': 'o', 'ô': 'o', 'ö': 'o', 'õ': 'o',
+        'ó': 'o', 'ò': 'o', 'ô': 'o', 'ö': 'o', 'õ': 'o', 'ø': 'o',
         'ú': 'u', 'ù': 'u', 'û': 'u', 'ü': 'u',
         'ñ': 'n', 'ç': 'c',
         'Á': 'A', 'À': 'A', 'Â': 'A', 'Ä': 'A', 'Ã': 'A', 'Å': 'A',
         'É': 'E', 'È': 'E', 'Ê': 'E', 'Ë': 'E',
         'Í': 'I', 'Ì': 'I', 'Î': 'I', 'Ï': 'I',
-        'Ó': 'O', 'Ò': 'O', 'Ô': 'O', 'Ö': 'O', 'Õ': 'O',
+        'Ó': 'O', 'Ò': 'O', 'Ô': 'O', 'Ö': 'O', 'Õ': 'O', 'Ø': 'O',
         'Ú': 'U', 'Ù': 'U', 'Û': 'U', 'Ü': 'U',
         'Ñ': 'N', 'Ç': 'C'
     }
-    return ''.join(replacements.get(c, c) for c in input_str)
+    
+    # Primero convertimos a minúsculas
+    input_str = input_str.lower()
+    
+    # Luego reemplazamos los caracteres
+    for original, replacement in replacements.items():
+        input_str = input_str.replace(original, replacement)
+    
+    return input_str
 
 def format_history_entry(entry: Tuple[int, str, str, str, str, List[str]]) -> str:
     """Formatea una entrada del historial para mostrar en la salida"""
@@ -473,6 +481,12 @@ def search_streaming_history(search_term: str) -> None:
     try:
         cursor = conn.cursor()
         
+        # Normalizamos el término de búsqueda en Python
+        search_term_lower = search_term.lower()
+        search_term_upper = search_term.upper()
+        search_term_no_accents = remove_accents(search_term)
+        
+        # Primero obtenemos todas las URLs
         cursor.execute('''
             SELECT 
                 sh.id, 
@@ -484,19 +498,37 @@ def search_streaming_history(search_term: str) -> None:
             FROM streaming_history sh
             LEFT JOIN url_tags ut ON sh.id = ut.url_id
             LEFT JOIN tags t ON ut.tag_id = t.id
-            WHERE LOWER(sh.title) LIKE ?
-        ''', (f'%{remove_accents(search_term.lower())}%',))
+            GROUP BY sh.id
+            ORDER BY sh.timestamp DESC
+        ''')
         
-        results = cursor.fetchall()
+        # Filtramos los resultados en Python
+        results = []
+        for row in cursor.fetchall():
+            title = row[2].lower()
+            title_no_accents = remove_accents(title)
+            
+            if (search_term_lower in title or
+                search_term_upper in title or
+                search_term_no_accents in title_no_accents):
+                results.append(row)
         
         if not results:
             print(f"No se encontraron resultados para '{search_term}'")
             return
-            
-        print(f"\nResultados de búsqueda para '{search_term}':")
+        
+        print(f"Resultados para '{search_term}':")
         print("-" * 80)
-        for id, url, title, platform, timestamp, tags in results:
-            print(f"ID: {id}")
+        
+        for row in results:
+            url_id = row[0]
+            url = row[1]
+            title = row[2]
+            platform = row[3]
+            timestamp = row[4]
+            tags = row[5]
+            
+            print(f"ID: {url_id}")
             print(f"URL: {url}")
             print(f"Título: {title}")
             print(f"Plataforma: {platform}")
@@ -692,9 +724,24 @@ def autocomplete_tag_parents(prefix, parsed_args, **kwargs):
     return []
 
 def main() -> None:
+    # Descripción del programa
+    description = '''
+    Gestiona el historial de URLs de streaming y sus tags
+
+    Comandos principales:
+      play [ID]           Reproduce una URL de streaming
+      copy [ID]          Copia una URL de streaming al portapapeles
+      rm [ID]            Elimina una URL del historial
+      search [TÉRMINO]   Busca URLs en el historial
+      toggle             Alterna entre modo normal y modo alterclip
+      hist               Muestra el historial de URLs
+      tag                Gestiona tags para organizar el historial
+    '''
+
     parser = argparse.ArgumentParser(
-        description='Gestiona el historial de URLs de streaming y sus tags',
-        formatter_class=argparse.RawTextHelpFormatter
+        description=description,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        add_help=True
     )
     
     # Configurar autocompletado
@@ -754,13 +801,12 @@ def main() -> None:
     parser_tag_update.add_argument('--new-name', help='Nuevo nombre para el tag')
     parser_tag_update.add_argument('--description', help='Nueva descripción del tag')
     
-    # Comando para mostrar jerarquía de un tag
-    parser_tag_get_hierarchy = tag_subparsers.add_parser('get-hierarchy', help='Obtiene la jerarquía de un tag')
-    parser_tag_get_hierarchy.add_argument('name', help='Nombre del tag')
+    # Manejar el caso de no argumentos
+    if len(sys.argv) == 1:
+        parser.print_help()
+        sys.exit(0)
     
-    # Comando para mostrar ayuda
-    parser_help = subparsers.add_parser('help', help='Muestra esta ayuda')
-    
+    # Ejecutar el comando
     args = parser.parse_args()
     
     try:
