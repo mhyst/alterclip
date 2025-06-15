@@ -755,6 +755,7 @@ def main() -> None:
     subparsers = parser.add_subparsers(dest='command', help='Comandos disponibles')
     
     # Comandos existentes
+    parser_man = subparsers.add_parser('man', help='Muestra la ayuda completa')
     parser_play = subparsers.add_parser('play', help='Reproduce una URL de streaming')
     parser_play.add_argument('id', type=int, help='ID de la URL a reproducir')
     
@@ -815,7 +816,9 @@ def main() -> None:
     args = parser.parse_args()
     
     try:
-        if args.command == 'play':
+        if args.command == 'man':
+            show_help()
+        elif args.command == 'play':
             play_streaming_url(args.id)
         elif args.command == 'copy':
             copy_streaming_url(args.id)
