@@ -156,7 +156,7 @@ def get_streaming_history(limit: int = 10, no_limit: bool = False, search: str =
             print("No hay historial disponible")
             return
             
-        print("\nHistorial de URLs de streaming:")
+        print(f"\nHistorial de URLs de streaming ({len(history)} resultados):")
         print("-" * 80)
         for entry in history:
             print(format_history_entry(entry))
@@ -517,7 +517,7 @@ def search_streaming_history(search_term: str) -> None:
             print(f"No se encontraron resultados para '{search_term}'")
             return
         
-        print(f"Resultados para '{search_term}':")
+        print(f"Resultados para '{search_term}' ({len(results)} resultados): ")
         print("-" * 80)
         
         for row in results:
@@ -560,7 +560,7 @@ def list_tags() -> None:
         print(f"Error al listar tags: {e}", file=sys.stderr)
 
 def show_tag_hierarchy() -> None:
-    """Muestra la jerarquía completa de tags"""
+    """Muestra la jerarquía completa de tags con el número de URLs asociadas"""
     try:
         cursor = conn.cursor()
         
@@ -577,29 +577,34 @@ def show_tag_hierarchy() -> None:
         
         # Obtener todos los tags raíz
         cursor.execute('''
-            SELECT t.name, t.id
+            SELECT t.name, t.id,
+                   (SELECT COUNT(*) 
+                    FROM url_tags ut 
+                    WHERE ut.tag_id = t.id) as url_count
             FROM tags t
-            WHERE t.id NOT IN (SELECT child_id FROM tag_hierarchy)
+            LEFT JOIN tag_hierarchy th ON t.id = th.child_id
+            WHERE th.parent_id IS NULL
             ORDER BY t.name
         ''')
         root_tags = cursor.fetchall()
         
-        if not root_tags:
-            print("No hay jerarquía de tags disponible")
-            return
-            
-        print("\nJerarquía de tags:")
-        print("-" * 80)
-        
         # Función auxiliar para mostrar la jerarquía con espaciado
         def print_hierarchy(tag_name, tag_id, level=0):
-            print(f"{'  ' * level}- {tag_name}")
+            # Obtener el número de URLs asociadas
+            cursor.execute('''
+                SELECT COUNT(*) 
+                FROM url_tags ut 
+                WHERE ut.tag_id = ?
+            ''', (tag_id,))
+            url_count = cursor.fetchone()[0]
+            
+            print(f"{'  ' * level}- {tag_name} ({url_count})")
             children = get_children(tag_id)
             for child_name, child_id in children:
                 print_hierarchy(child_name, child_id, level + 1)
         
         # Mostrar la jerarquía
-        for tag_name, tag_id in root_tags:
+        for tag_name, tag_id, _ in root_tags:
             print_hierarchy(tag_name, tag_id)
         
         print("-" * 80)
