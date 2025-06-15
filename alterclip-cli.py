@@ -57,8 +57,12 @@ def format_history_entry(entry: Tuple[int, str, str, str, str, List[str]]) -> st
     # Convertir cada tag a su jerarquía completa
     formatted_tags = []
     for tag in tags:
+        # Obtener la jerarquía completa del tag
         hierarchy = get_tag_hierarchy(tag)
         formatted_tags.append(hierarchy)
+    
+    # Unir las jerarquías con comas
+    tags_str = ', '.join(formatted_tags)
     
     return f"""
 ID: {id}
@@ -66,20 +70,21 @@ URL: {url}
 Título: {title}
 Plataforma: {platform}
 Fecha: {timestamp}
-Tags: {', '.join(formatted_tags)}
+Tags: {tags_str}
 {'-' * 80}"""
 
 def get_streaming_history(limit: int = 10, no_limit: bool = False, search: str = None, tags: List[str] = None) -> None:
     """Obtiene el historial de URLs de streaming con sus tags asociados
     Si no_limit es True, muestra todo el historial
     Si no_limit es False y limit es None, muestra 10 entradas por defecto
-    Si search no es None, muestra solo las entradas que contengan la cadena de búsqueda en el título
+    Si search no es None, muestra solo las entradas que contengan la cadena de búsqueda en el título o URL
     Si tags no es None, muestra solo las entradas que tengan al menos uno de los tags especificados
     También muestra URLs relacionadas con tags hijos y padres de los especificados"""
     try:
         cursor = conn.cursor()
         
-        query = '''
+        # Primero obtenemos todas las URLs
+        cursor.execute('''
             SELECT 
                 sh.id, 
                 sh.url, 
@@ -90,18 +95,61 @@ def get_streaming_history(limit: int = 10, no_limit: bool = False, search: str =
             FROM streaming_history sh
             LEFT JOIN url_tags ut ON sh.id = ut.url_id
             LEFT JOIN tags t ON ut.tag_id = t.id
-        '''
+            GROUP BY sh.id, sh.url, sh.title, sh.platform, sh.timestamp
+            ORDER BY sh.timestamp DESC
+        ''')
         
-        params = []
-        conditions = []
+        all_entries = cursor.fetchall()
         
+        if not all_entries:
+            print("No hay historial disponible")
+            return
+            
+        # Si hay búsqueda, filtramos los resultados
         if search:
-            search_term = f'%{remove_accents(search.lower())}%'
-            conditions.append('(LOWER(sh.title) LIKE ? OR LOWER(sh.url) LIKE ?)')
-            params.extend([search_term, search_term])
-        
+            search_term = remove_accents(search.lower())
+            search_term_upper = search.upper()
+            
+            results = []
+            for entry in all_entries:
+                url_id = entry[0]
+                url = entry[1]
+                title = entry[2]
+                platform = entry[3]
+                timestamp = entry[4]
+                tags = entry[5]
+                
+                # Normalizar los campos para búsqueda
+                title_lower = title.lower() if title else ""
+                title_upper = title.upper() if title else ""
+                title_no_accents = remove_accents(title) if title else ""
+                url_lower = url.lower()
+                url_upper = url.upper()
+                url_no_accents = remove_accents(url)
+                
+                # Verificar si el término de búsqueda está en el título o URL
+                if (search_term in title_lower or
+                    search_term_upper in title_upper or
+                    search_term in title_no_accents or
+                    search_term in url_lower or
+                    search_term_upper in url_upper or
+                    search_term in url_no_accents):
+                    # Convertir tags a lista
+                    tags_list = tags.split(',') if tags else []
+                    results.append((url_id, url, title, platform, timestamp, tags_list))
+            
+            if not results:
+                print(f"No se encontraron resultados para '{search}'")
+                return
+                
+            entries = results
+        else:
+            # Convertir tags a lista para todas las entradas
+            entries = [(entry[0], entry[1], entry[2], entry[3], entry[4], entry[5].split(',') if entry[5] else [])
+                      for entry in all_entries]
+            
+        # Si hay tags, filtramos por tags
         if tags:
-            # Obtener IDs de los tags, sus hijos y sus padres
             tag_ids = []
             for tag in tags:
                 tag_id = get_tag_id(tag)
@@ -133,32 +181,29 @@ def get_streaming_history(limit: int = 10, no_limit: bool = False, search: str =
             if tag_ids:
                 # Convertir la lista de IDs a una cadena SQL
                 tag_ids_str = ','.join('?' for _ in tag_ids)
-                conditions.append(f'sh.id IN (SELECT url_id FROM url_tags WHERE tag_id IN ({tag_ids_str}))')
-                params.extend(tag_ids)
+                cursor.execute(f'''
+                    SELECT DISTINCT sh.id
+                    FROM streaming_history sh
+                    JOIN url_tags ut ON sh.id = ut.url_id
+                    WHERE ut.tag_id IN ({tag_ids_str})
+                ''', tag_ids)
+                
+                tag_entries = cursor.fetchall()
+                tag_entry_ids = {row[0] for row in tag_entries}
+                
+                entries = [entry for entry in entries if entry[0] in tag_entry_ids]
+                
+                if not entries:
+                    print(f"No se encontraron resultados con los tags especificados")
+                    return
         
-        if conditions:
-            query += ' WHERE ' + ' AND '.join(conditions)
-        
-        query += ' GROUP BY sh.id, sh.url, sh.title, sh.platform, sh.timestamp'
-        
+        # Limitar el número de resultados si no se ha pedido todo el historial
         if not no_limit:
-            query += ' ORDER BY sh.timestamp DESC LIMIT ?'
-            params.append(limit if limit else 10)
+            entries = entries[:limit if limit else 10]
         
-        cursor.execute(query, params)
-        
-        history = []
-        for row in cursor.fetchall():
-            tags = row[5].split(',') if row[5] else []
-            history.append((row[0], row[1], row[2], row[3], row[4], tags))
-        
-        if not history:
-            print("No hay historial disponible")
-            return
-            
-        print(f"\nHistorial de URLs de streaming ({len(history)} resultados):")
+        print(f"\nHistorial de URLs de streaming ({len(entries)} resultados):")
         print("-" * 80)
-        for entry in history:
+        for entry in entries:
             print(format_history_entry(entry))
         
     except Exception as e:
@@ -521,6 +566,7 @@ def search_streaming_history(search_term: str) -> None:
         print("-" * 80)
         
         for row in results:
+            # print(format_history_entry(row))
             url_id = row[0]
             url = row[1]
             title = row[2]
