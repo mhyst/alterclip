@@ -10,7 +10,6 @@
 - 📋 Monitoriza el portapapeles de forma continua.
 - 🎬 Abre automáticamente vídeos de YouTube, Instagram y Facebook con tu reproductor multimedia favorito.
 - 📚 Almacena el historial de vídeos reproducidos con título y plataforma.
-- 🧠 Decide automáticamente si cambiar o no un texto según su contenido.
 - 📦 Compatible con Linux, macOS y Windows (con pequeñas adaptaciones).
 - 🔧 Dos modos de funcionamiento con cambio dinámico mediante señales.
 - 📊 Interfaz de línea de comandos para gestionar el historial y reproducir vídeos guardados.
