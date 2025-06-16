@@ -11,8 +11,26 @@ from typing import List, Tuple
 from unidecode import unidecode
 import argcomplete
 import os
+from termcolor import colored
 
 conn = None
+
+def print_error(message: str, file=sys.stderr) -> None:
+    """Muestra un mensaje de error con formato mejorado"""
+    print(colored("Error:", 'red', attrs=['bold']), 
+          colored(message, 'red'), 
+          file=file)
+
+def print_separator(char='─', length=80, style='thin') -> None:
+    """Muestra una línea separadora con formato mejorado usando caracteres Unicode
+    Estilos disponibles: 'thin', 'thick', 'double'"""
+    styles = {
+        'thin': '─',
+        'thick': '━',
+        'double': '═'
+    }
+    separator = styles.get(style, char) * length
+    print(colored(separator, 'white', attrs=['dark']))
 
 def get_db_path() -> Path:
     """Obtiene la ruta de la base de datos"""
@@ -64,21 +82,25 @@ def format_history_entry(entry: Tuple[int, str, str, str, str, List[str]]) -> st
     # Convertir cada tag a su jerarquía completa
     formatted_tags = []
     for tag in tags:
-        # Obtener la jerarquía completa del tag
         hierarchy = get_tag_hierarchy(tag)
         formatted_tags.append(hierarchy)
     
     # Unir las jerarquías con comas
     tags_str = ', '.join(formatted_tags)
     
+    # Formatear la fecha de manera más legible
+    from datetime import datetime
+    date = datetime.fromisoformat(timestamp)
+    formatted_date = date.strftime('%Y-%m-%d %H:%M:%S')
+    
     return f"""
-ID: {id}
-URL: {url}
-Título: {title}
-Plataforma: {platform}
-Fecha: {timestamp}
-Tags: {tags_str}
-{'-' * 80}"""
+{colored('ID:', 'yellow')} {id}
+{colored('URL:', 'cyan')} {url}
+{colored('Título:', 'blue')} {title}
+{colored('Plataforma:', 'magenta')} {platform}
+{colored('Fecha:', 'green')} {formatted_date}
+{colored('Tags:', 'yellow')} {tags_str}
+{colored('─' * 80, 'white', attrs=['dark'])}"""
 
 def get_streaming_history(limit: int = 10, no_limit: bool = False, search: str = None, tags: List[str] = None) -> None:
     """Obtiene el historial de URLs de streaming con sus tags asociados
@@ -213,7 +235,7 @@ def get_streaming_history(limit: int = 10, no_limit: bool = False, search: str =
             entries = entries[:limit if limit else 10]
         
         print(f"\nHistorial de URLs de streaming ({len(entries)} resultados):")
-        print("-" * 80)
+        print_separator(style='double')
         for entry in entries:
             print(format_history_entry(entry))
         
@@ -408,41 +430,60 @@ def toggle_mode() -> None:
 
 def show_help() -> None:
     """Muestra información detallada sobre el uso de alterclip-cli"""
-    print("""
+    print(colored("""
 alterclip-cli - Interfaz de línea de comandos para alterclip
-
-Uso:
-    alterclip-cli [comando] [opciones]
-
-Comandos disponibles:
-
-    history [--limit N] [--no-limit]
+""", 'cyan', attrs=['bold']))
+    
+    print(colored("\nUso:", 'yellow', attrs=['bold']))
+    print(colored("    alterclip-cli [comando] [opciones]", 'white'))
+    
+    print(colored("\nComandos disponibles:", 'yellow', attrs=['bold']))
+    print_separator(style='double')
+    print(colored("""
+    hist [--limit N] [--no-limit] [--search [TÉRMINO]] [--tags [TAGS]]
         Muestra el historial de URLs de streaming reproducidas
-        Opciones:
+
+        Opciones de filtrado:
+            --search     Filtro de búsqueda en el título o URL
+            --tags       Filtro de búsqueda por tags
+
+        Opciones de visualización:
             --limit N    Número de entradas a mostrar (por defecto: 10)
             --no-limit   Muestra todo el historial sin límite
-
+""", 'white'))
+    
+    print(colored("""
     play [ID]
         Reproduce una URL de streaming guardada usando su ID
         ID: Identificador numérico de la URL en el historial. Si no se especifica, se reproducirá el último video (-1)
-
+""", 'white'))
+    
+    print(colored("""
     copy [ID]
         Copia una URL de streaming al portapapeles con prefijo share.only/
         ID: Identificador numérico de la URL en el historial. Si no se especifica, se copiará el último video (-1)
-
+""", 'white'))
+    
+    print(colored("""
     rm [ID]
         Elimina una entrada del historial
         ID: Identificador numérico de la entrada a eliminar
-
+""", 'white'))
+    
+    print(colored("""
     toggle
         Cambia el modo de alterclip entre streaming y offline
         En modo streaming: alterclip reproducirá automáticamente las URLs de streaming
         En modo offline: alterclip solo guardará las URLs para futura referencia
-
-    search [TERM]
+""", 'white'))
+    
+    print(colored("""
+    search [TÉRMINO]
         Busca URLs en el historial por título
-        TERM: Término de búsqueda
-
+        TÉRMINO: Término de búsqueda
+""", 'white'))
+    
+    print(colored("""
     tag [acción] [opciones]
         Gestiona tags para organizar el historial
         Acciones disponibles:
@@ -467,27 +508,36 @@ Comandos disponibles:
                 nombre: Nombre actual del tag
                 nuevo_nombre: Nuevo nombre para el tag
                 nueva_descripción: Nueva descripción del tag
-            get-hierarchy [nombre]
-                Obtiene la jerarquía de un tag
-                nombre: Nombre del tag
-
-    help
+""", 'white'))
+    
+    print(colored("""
+    man
         Muestra esta ayuda detallada
-
-Información adicional:
+""", 'white'))
+    
+    print(colored("\nInformación adicional:", 'yellow', attrs=['bold']))
+    print(colored("""
 - alterclip guarda automáticamente todas las URLs de streaming en su base de datos
   incluso cuando está en modo offline
 - Las URLs se pueden reproducir más tarde usando el comando 'play' y su ID
 - El historial muestra el título del contenido, la plataforma (YouTube, Instagram, etc.)
   y la fecha de reproducción
 - La base de datos se almacena en el directorio de configuración del usuario
-
-Ejemplos:
+""", 'white'))
+    
+    print(colored("\nEjemplos:", 'yellow', attrs=['bold']))
+    print(colored("""
     # Ver el historial completo
-    alterclip-cli history --no-limit
+    alterclip-cli hist --no-limit
 
     # Ver solo las últimas 5 entradas
-    alterclip-cli history --limit 5
+    alterclip-cli hist --limit 5
+
+    # Ver el historial filtrado por título
+    alterclip-cli hist --search "título de búsqueda"
+
+    # Ver el historial filtrado por tags
+    alterclip-cli hist --tags "tag1 tag2"
 
     # Reproducir una URL con ID 123
     alterclip-cli play 123
@@ -528,37 +578,44 @@ Ejemplos:
     # Actualiza un tag
     alterclip-cli tag update "nombre del tag" --new-name "nuevo nombre del tag"
 
-    # Obtiene la jerarquía de un tag
-    alterclip-cli tag get-hierarchy "nombre del tag"
-""")
+    # Ver la ayuda completa
+    alterclip-cli man
+    """, 'white'))
 
 def list_tags() -> None:
-    """Lista todos los tags"""
+    """Lista todos los tags con información adicional"""
     try:
         cursor = conn.cursor()
         
-        cursor.execute('SELECT name FROM tags')
+        cursor.execute('''
+            SELECT t.name, t.description, 
+                   (SELECT COUNT(*) 
+                    FROM url_tags ut 
+                    WHERE ut.tag_id = t.id) as url_count
+            FROM tags t
+            ORDER BY t.name
+        ''')
         
-        tags = [row[0] for row in cursor.fetchall()]
+        tags = cursor.fetchall()
         
         if not tags:
-            print("No hay tags disponibles")
+            print_error("No hay tags disponibles")
             return
             
-        print("\nTags disponibles:")
-        print("-" * 80)
-        for tag in tags:
-            print(tag)
-        print("-" * 80)
+        print(colored("\nTags disponibles:", 'yellow', attrs=['bold']))
+        print(colored(f"{'Nombre':<30} {'Descripción':<40} {'URLs':>8}", 'white', attrs=['bold']))
+        print_separator(style='double')
+        for name, description, url_count in tags:
+            print(f"{colored(name, 'cyan'):<30} {description[:40]:<40} {colored(str(url_count), 'yellow'):<8}")
+        print_separator(style='thick')
     except Exception as e:
-        print(f"Error al listar tags: {e}", file=sys.stderr)
+        print_error(f"Error al listar tags: {e}")
 
 def show_tag_hierarchy() -> None:
-    """Muestra la jerarquía completa de tags con el número de URLs asociadas"""
+    """Muestra la jerarquía completa de tags con formato mejorado"""
     try:
         cursor = conn.cursor()
         
-        # Función auxiliar para obtener los hijos de un tag
         def get_children(tag_id):
             cursor.execute('''
                 SELECT t.name, t.id
@@ -569,7 +626,6 @@ def show_tag_hierarchy() -> None:
             ''', (tag_id,))
             return cursor.fetchall()
         
-        # Obtener todos los tags raíz
         cursor.execute('''
             SELECT t.name, t.id,
                    (SELECT COUNT(*) 
@@ -582,9 +638,7 @@ def show_tag_hierarchy() -> None:
         ''')
         root_tags = cursor.fetchall()
         
-        # Función auxiliar para mostrar la jerarquía con espaciado
         def print_hierarchy(tag_name, tag_id, level=0):
-            # Obtener el número de URLs asociadas
             cursor.execute('''
                 SELECT COUNT(*) 
                 FROM url_tags ut 
@@ -592,18 +646,23 @@ def show_tag_hierarchy() -> None:
             ''', (tag_id,))
             url_count = cursor.fetchone()[0]
             
-            print(f"{'  ' * level}- {tag_name} ({url_count})")
+            # Usar colores diferentes para diferentes niveles
+            colors = ['cyan', 'yellow', 'green', 'magenta']
+            color = colors[level % len(colors)]
+            indent = '  ' * level
+            print(f"{indent}{colored(f'- {tag_name}', color)} ({colored(str(url_count), 'yellow')})")
+            
             children = get_children(tag_id)
             for child_name, child_id in children:
                 print_hierarchy(child_name, child_id, level + 1)
         
-        # Mostrar la jerarquía
+        print(colored("\nJerarquía de tags:", 'yellow', attrs=['bold']))
+        print_separator(style='double')
         for tag_name, tag_id, _ in root_tags:
             print_hierarchy(tag_name, tag_id)
-        
-        print("-" * 80)
+        print_separator(style='double')
     except Exception as e:
-        print(f"Error al mostrar jerarquía de tags: {e}", file=sys.stderr)
+        print_error(f"Error al mostrar jerarquía de tags: {e}")
 
 def remove_tag(name: str) -> None:
     """Elimina un tag"""
@@ -845,8 +904,6 @@ def main() -> None:
                 remove_tag(args.name)
             elif args.action == 'update':
                 update_tag(args.name, args.new_name, args.description)
-            elif args.action == 'get-hierarchy':
-                print(get_tag_hierarchy(args.name))
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)

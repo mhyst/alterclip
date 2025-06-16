@@ -1,0 +1,4 @@
+pyperclip>=1.8.2
+platformdirs>=3.9.0
+plyer>=2.1.0
+termcolor>=2.3.0

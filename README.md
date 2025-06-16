@@ -112,7 +112,7 @@ Ejemplos de uso:
 ./alterclip-cli tag rm "Arqueología"
 
 # Ver ayuda completa
-./alterclip-cli help
+./alterclip-cli man
 ```
 
 ---
