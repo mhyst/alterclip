@@ -10,6 +10,7 @@ import subprocess
 from typing import List, Tuple
 from unidecode import unidecode
 import argcomplete
+import os
 
 conn = None
 
@@ -741,7 +742,13 @@ def main() -> None:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         add_help=True
     )
-       
+    
+    # Configurar autocompletado
+    if '_ARGCOMPLETE' in os.environ:
+        argcomplete.autocomplete(parser)
+        sys.exit(0)
+    
+    
     subparsers = parser.add_subparsers(dest='command', help='Comandos disponibles')
     
     # Comandos existentes
@@ -802,8 +809,6 @@ def main() -> None:
         parser.print_help()
         sys.exit(0)
     
-    # Configurar autocompletado
-    argcomplete.autocomplete(parser)
     # Ejecutar el comando
     args = parser.parse_args()
     
