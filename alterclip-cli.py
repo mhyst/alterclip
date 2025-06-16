@@ -21,9 +21,6 @@ def create_connection() -> sqlite3.Connection:
     conn = sqlite3.connect(get_db_path())
     return conn
 
-# Función para obtener la conexión global
-conn = create_connection()
-
 def remove_accents(input_str: str) -> str:
     """Elimina los acentos de una cadena de texto"""
     replacements = {
@@ -156,11 +153,15 @@ def get_streaming_history(limit: int = 10, no_limit: bool = False, search: str =
                 if tag_id:
                     tag_ids.append(tag_id)
                     
-                    # Obtener IDs de los tags hijos
+                    # Obtener IDs de los tags hijos y descendientes
                     cursor.execute('''
-                        SELECT child_id 
-                        FROM tag_hierarchy 
-                        WHERE parent_id = ?
+                        WITH RECURSIVE descendant_tags(id) AS (
+                            SELECT child_id FROM tag_hierarchy WHERE parent_id = ?
+                            UNION ALL
+                            SELECT th.child_id FROM tag_hierarchy th
+                            JOIN descendant_tags dt ON th.parent_id = dt.id
+                        )
+                        SELECT id FROM descendant_tags
                     ''', (tag_id,))
                     child_ids = cursor.fetchall()
                     tag_ids.extend([child[0] for child in child_ids])
@@ -521,69 +522,6 @@ Ejemplos:
     alterclip-cli tag get-hierarchy "nombre del tag"
 """)
 
-def search_streaming_history(search_term: str) -> None:
-    """Busca URLs de streaming en el historial que contengan la cadena de búsqueda en el título"""
-    try:
-        cursor = conn.cursor()
-        
-        # Normalizamos el término de búsqueda en Python
-        search_term_lower = search_term.lower()
-        search_term_upper = search_term.upper()
-        search_term_no_accents = remove_accents(search_term)
-        
-        # Primero obtenemos todas las URLs
-        cursor.execute('''
-            SELECT 
-                sh.id, 
-                sh.url, 
-                sh.title, 
-                sh.platform, 
-                sh.timestamp,
-                GROUP_CONCAT(t.name) as tags
-            FROM streaming_history sh
-            LEFT JOIN url_tags ut ON sh.id = ut.url_id
-            LEFT JOIN tags t ON ut.tag_id = t.id
-            GROUP BY sh.id
-            ORDER BY sh.timestamp DESC
-        ''')
-        
-        # Filtramos los resultados en Python
-        results = []
-        for row in cursor.fetchall():
-            title = row[2].lower()
-            title_no_accents = remove_accents(title)
-            
-            if (search_term_lower in title or
-                search_term_upper in title or
-                search_term_no_accents in title_no_accents):
-                results.append(row)
-        
-        if not results:
-            print(f"No se encontraron resultados para '{search_term}'")
-            return
-        
-        print(f"Resultados para '{search_term}' ({len(results)} resultados): ")
-        print("-" * 80)
-        
-        for row in results:
-            # print(format_history_entry(row))
-            url_id = row[0]
-            url = row[1]
-            title = row[2]
-            platform = row[3]
-            timestamp = row[4]
-            tags = row[5]
-            
-            print(f"ID: {url_id}")
-            print(f"URL: {url}")
-            print(f"Título: {title}")
-            print(f"Plataforma: {platform}")
-            print(f"Fecha: {timestamp}")
-            print(f"Tags: {', '.join(tags.split(',') if tags else [])}")
-            print("-" * 80)
-    except Exception as e:
-        print(f"Error al buscar en el historial: {e}", file=sys.stderr)
-
 def list_tags() -> None:
     """Lista todos los tags"""
     try:
@@ -871,7 +809,7 @@ def main() -> None:
         elif args.command == 'rm':
             remove_streaming_url(args.id)
         elif args.command == 'search':
-            search_streaming_history(args.term)
+            get_streaming_history(search=args.term)
         elif args.command == 'toggle':
             toggle_mode()
         elif args.command == 'hist':
@@ -901,5 +839,6 @@ def main() -> None:
         sys.exit(1)
 
 if __name__ == "__main__":
+    conn = create_connection()
     main()
     conn.close()
