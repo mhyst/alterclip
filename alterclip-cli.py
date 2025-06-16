@@ -11,6 +11,8 @@ from typing import List, Tuple
 from unidecode import unidecode
 import argcomplete
 
+conn = None
+
 def get_db_path() -> Path:
     """Obtiene la ruta de la base de datos"""
     return Path(user_log_dir("alterclip")) / "streaming_history.db"
@@ -19,6 +21,13 @@ def get_db_path() -> Path:
 def create_connection() -> sqlite3.Connection:
     """Crea una conexión a la base de datos"""
     conn = sqlite3.connect(get_db_path())
+    return conn
+
+def get_db_connection() -> sqlite3.Connection:
+    """Obtiene la conexión a la base de datos, asegurándose de que esté establecida"""
+    global conn
+    if conn is None:
+        conn = create_connection()
     return conn
 
 def remove_accents(input_str: str) -> str:
@@ -679,7 +688,7 @@ def get_tag_hierarchy(tag_name: str) -> str:
 def get_available_tags() -> List[str]:
     """Obtiene la lista de tags disponibles en la base de datos"""
     try:
-        cursor = conn.cursor()
+        cursor = get_db_connection().cursor()
         cursor.execute('SELECT name FROM tags ORDER BY name')
         return [row[0] for row in cursor.fetchall()]
     except:
@@ -688,7 +697,7 @@ def get_available_tags() -> List[str]:
 def get_tag_parents(tag_name: str) -> List[str]:
     """Obtiene los posibles padres para un tag"""
     try:
-        cursor = conn.cursor()
+        cursor = get_db_connection().cursor()
         cursor.execute('''
             SELECT t.name
             FROM tags t
@@ -732,10 +741,7 @@ def main() -> None:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         add_help=True
     )
-    
-    # Configurar autocompletado
-    argcomplete.autocomplete(parser)
-    
+       
     subparsers = parser.add_subparsers(dest='command', help='Comandos disponibles')
     
     # Comandos existentes
@@ -796,6 +802,8 @@ def main() -> None:
         parser.print_help()
         sys.exit(0)
     
+    # Configurar autocompletado
+    argcomplete.autocomplete(parser)
     # Ejecutar el comando
     args = parser.parse_args()
     
@@ -839,6 +847,9 @@ def main() -> None:
         sys.exit(1)
 
 if __name__ == "__main__":
-    conn = create_connection()
-    main()
-    conn.close()
+    try:
+        conn = create_connection()
+        main()
+    finally:
+        if conn is not None:
+            conn.close()
