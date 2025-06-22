@@ -834,8 +834,8 @@ def main() -> None:
       tag list             Lista todos los tags
       tag hierarchy        Muestra la jerarquía completa de tags
       tag update [NOMBRE]  Actualiza un tag
-      tag url [ID] [TAG]   Asocia un tag con una URL
-      tag url rm [ID] [TAG] Elimina la asociación entre una URL y un tag
+      tag url add [ID] [TAG]   Asocia un tag con una URL
+      tag url rm [ID] [TAG]   Elimina la asociación entre una URL y un tag
     '''
 
     parser = argparse.ArgumentParser(
@@ -875,8 +875,8 @@ def main() -> None:
     parser_hist.add_argument('--tags', nargs='*', help='Filtro de búsqueda por tags')
     
     # Comandos para gestionar tags
-    tag_parser = subparsers.add_parser('tag', help='Gestiona tags para organizar el historial')
-    tag_subparsers = tag_parser.add_subparsers(dest='tag_command', help='Comandos de tag')
+    parser_tag = subparsers.add_parser('tag', help='Gestiona tags para organizar el historial')
+    tag_subparsers = parser_tag.add_subparsers(dest='tag_command', help='Comandos de tag')
 
     # Comando tag add
     add_parser = tag_subparsers.add_parser('add', help='Añade un nuevo tag')
@@ -900,8 +900,17 @@ def main() -> None:
     update_parser.add_argument('--new-name', help='Nuevo nombre del tag')
     update_parser.add_argument('--description', help='Nueva descripción del tag')
 
-    # Comando tag url rm
-    url_rm_parser = tag_subparsers.add_parser('url rm', help='Elimina una asociación entre URL y tag')
+    # Comando tag url
+    url_parser = tag_subparsers.add_parser('url', help='Gestiona asociaciones entre URLs y tags')
+    url_subparsers = url_parser.add_subparsers(dest='url_command', help='Comandos de URL')
+
+    # Subcomando tag url add
+    url_add_parser = url_subparsers.add_parser('add', help='Asocia un tag con una URL')
+    url_add_parser.add_argument('url_id', type=int, help='ID de la URL')
+    url_add_parser.add_argument('tag_name', help='Nombre del tag a asociar').completer = autocomplete_tags
+
+    # Subcomando tag url rm
+    url_rm_parser = url_subparsers.add_parser('rm', help='Elimina una asociación entre URL y tag')
     url_rm_parser.add_argument('url_id', type=int, help='ID de la URL')
     url_rm_parser.add_argument('tag_name', help='Nombre del tag a eliminar de la URL').completer = autocomplete_tags
     
@@ -936,18 +945,19 @@ def main() -> None:
         elif args.command == 'tag':
             if args.tag_command == 'add':
                 add_tag(args.name, args.parent, args.description)
-            elif args.tag_command == 'url':
-                add_tag_to_url(args.url_id, args.tag_name)
-            elif args.tag_command == 'url rm':
-                remove_tag_from_url(args.url_id, args.tag_name)
+            elif args.tag_command == 'rm':
+                remove_tag(args.name)
             elif args.tag_command == 'list':
                 list_tags()
             elif args.tag_command == 'hierarchy':
                 show_tag_hierarchy()
-            elif args.tag_command == 'rm':
-                remove_tag(args.name)
             elif args.tag_command == 'update':
                 update_tag(args.name, args.new_name, args.description)
+            elif args.tag_command == 'url':
+                if args.url_command == 'add':
+                    add_tag_to_url(args.url_id, args.tag_name)
+                elif args.url_command == 'rm':
+                    remove_tag_from_url(args.url_id, args.tag_name)
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
