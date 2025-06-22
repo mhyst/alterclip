@@ -380,6 +380,35 @@ def copy_streaming_url(url_id: int) -> None:
         cursor = conn.cursor()
         
         # Si el ID es negativo, lo convertimos a un ID absoluto
+        if url_id < 0:
+            # Obtener el total de entradas
+            cursor.execute('SELECT COUNT(*) FROM streaming_history')
+            total_entries = cursor.fetchone()[0]
+            if total_entries == 0:
+                print("No hay entradas en el historial", file=sys.stderr)
+                return
+                
+            if abs(url_id) > total_entries:
+                print(f"Índice relativo {-url_id} fuera de rango", file=sys.stderr)
+                return
+                
+            url_id = total_entries + url_id + 1
+        
+        cursor.execute('SELECT url FROM streaming_history WHERE id = ?', (url_id,))
+        result = cursor.fetchone()
+        
+        if not result:
+            print(f"No se encontró URL con ID {url_id}", file=sys.stderr)
+            return
+            
+        url = result[0]
+        # Añadir prefijo share.only/ a la URL
+        share_url = f"share.only/{url}"
+        # Usar xclip para copiar al portapapeles
+        subprocess.run(['xclip', '-selection', 'clipboard'], input=share_url, text=True)
+        print(f"URL copiada al portapapeles: {share_url}")
+    except Exception as e:
+        print(f"Error al copiar URL: {e}", file=sys.stderr)
 
 def playall(args) -> None:
     """Maneja la reproducción múltiple de URLs según los filtros especificados"""
@@ -418,35 +447,6 @@ def playall(args) -> None:
             proceso.wait()  # Esperar a que termine cada video antes de reproducir el siguiente
     except Exception as e:
         print(f"Error en playall: {e}", file=sys.stderr)
-        if url_id < 0:
-            # Obtener el total de entradas
-            cursor.execute('SELECT COUNT(*) FROM streaming_history')
-            total_entries = cursor.fetchone()[0]
-            if total_entries == 0:
-                print("No hay entradas en el historial", file=sys.stderr)
-                return
-                
-            if abs(url_id) > total_entries:
-                print(f"Índice relativo {-url_id} fuera de rango", file=sys.stderr)
-                return
-                
-            url_id = total_entries + url_id + 1
-        
-        cursor.execute('SELECT url FROM streaming_history WHERE id = ?', (url_id,))
-        result = cursor.fetchone()
-        
-        if not result:
-            print(f"No se encontró URL con ID {url_id}", file=sys.stderr)
-            return
-            
-        url = result[0]
-        # Añadir prefijo share.only/ a la URL
-        share_url = f"share.only/{url}"
-        # Usar xclip para copiar al portapapeles
-        subprocess.run(['xclip', '-selection', 'clipboard'], input=share_url, text=True)
-        print(f"URL copiada al portapapeles: {share_url}")
-    except Exception as e:
-        print(f"Error al copiar URL: {e}", file=sys.stderr)
 
 def remove_streaming_url(url_id: int) -> None:
     """Elimina una URL de streaming del historial usando su ID"""
