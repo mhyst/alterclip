@@ -99,8 +99,8 @@ Ejemplos de uso:
 # Asociar un tag con una URL
 ./alterclip-cli tag url 123 "Arqueología"
 
-# Ver la jerarquía completa de tags
-./alterclip-cli tag hierarchy
+# Eliminar la asociación entre una URL y un tag
+./alterclip-cli tag url rm 123 "Arqueología"
 
 # Buscar URLs con un tag específico
 ./alterclip-cli hist --tags "Arqueología"

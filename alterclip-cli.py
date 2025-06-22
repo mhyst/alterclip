@@ -309,6 +309,33 @@ def add_tag_to_url(url_id: int, tag_name: str):
         print(f"Error: La URL ya tiene el tag '{tag_name}'")
         return False
 
+def remove_tag_from_url(url_id: int, tag_name: str):
+    """Elimina la asociación entre una URL y un tag específico"""
+    try:
+        cursor = conn.cursor()
+        
+        tag_id = get_tag_id(tag_name)
+        if not tag_id:
+            print(f"Error: El tag '{tag_name}' no existe")
+            return False
+            
+        # Eliminar la asociación
+        cursor.execute('''
+            DELETE FROM url_tags 
+            WHERE url_id = ? AND tag_id = ?
+        ''', (url_id, tag_id))
+        
+        if cursor.rowcount == 0:
+            print(f"La URL con ID {url_id} no tiene el tag '{tag_name}'")
+            return False
+            
+        conn.commit()
+        print(f"Tag '{tag_name}' eliminado de la URL con ID {url_id}")
+        return True
+    except Exception as e:
+        print(f"Error al eliminar tag de URL: {e}", file=sys.stderr)
+        return False
+
 def play_streaming_url(url_id: int) -> None:
     """Reproduce una URL de streaming por su ID (absoluto o relativo)
     Si el ID es negativo, se interpreta como un índice relativo desde el final
@@ -561,22 +588,25 @@ alterclip-cli - Interfaz de línea de comandos para alterclip
     alterclip-cli search "título de búsqueda"
 
     # Añadir un nuevo tag
-    alterclip-cli tag add "nombre del tag"
+    alterclip-cli tag add "Arqueología" --description "Contenido relacionado con arqueología"
+
+    # Crear un tag hijo
+    alterclip-cli tag add "Antiguas Civilizaciones" --parent "Arqueología"
 
     # Asociar un tag con una URL
-    alterclip-cli tag url 123 "nombre del tag"
+    alterclip-cli tag url 123 "Arqueología"
 
-    # Lista todos los tags
-    alterclip-cli tag list
+    # Eliminar una asociación entre URL y tag
+    alterclip-cli tag url rm 123 "Arqueología"
 
-    # Muestra la jerarquía completa de tags
-    alterclip-cli tag hierarchy
+    # Buscar URLs con un tag específico
+    alterclip-cli hist --tags "Arqueología"
 
-    # Elimina un tag
-    alterclip-cli tag rm "nombre del tag"
+    # Actualizar un tag
+    alterclip-cli tag update "Arqueología" --new-name "Arqueología y Antigüedad"
 
-    # Actualiza un tag
-    alterclip-cli tag update "nombre del tag" --new-name "nuevo nombre del tag"
+    # Eliminar un tag
+    alterclip-cli tag rm "Arqueología"
 
     # Ver la ayuda completa
     alterclip-cli man
@@ -796,6 +826,18 @@ def main() -> None:
       tag                Gestiona tags para organizar el historial
     '''
 
+    # Detalles adicionales sobre el comando tag
+    tag_details = '''
+    Comandos de tag:
+      tag add [NOMBRE]     Añade un nuevo tag
+      tag rm [NOMBRE]      Elimina un tag
+      tag list             Lista todos los tags
+      tag hierarchy        Muestra la jerarquía completa de tags
+      tag update [NOMBRE]  Actualiza un tag
+      tag url [ID] [TAG]   Asocia un tag con una URL
+      tag url rm [ID] [TAG] Elimina la asociación entre una URL y un tag
+    '''
+
     parser = argparse.ArgumentParser(
         description=description,
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -833,35 +875,35 @@ def main() -> None:
     parser_hist.add_argument('--tags', nargs='*', help='Filtro de búsqueda por tags')
     
     # Comandos para gestionar tags
-    parser_tag = subparsers.add_parser('tag', help='Gestiona tags para organizar el historial')
-    tag_subparsers = parser_tag.add_subparsers(dest='action', help='Acciones disponibles para tags')
-    
-    # Comando para crear un tag
-    parser_tag_add = tag_subparsers.add_parser('add', help='Añade un nuevo tag')
-    parser_tag_add.add_argument('name', help='Nombre del tag').completer = autocomplete_tags
-    parser_tag_add.add_argument('--parent', help='Nombre del tag padre (opcional)').completer = autocomplete_tag_parents
-    parser_tag_add.add_argument('--description', help='Descripción del tag (opcional)')
-    
-    # Comando para asociar un tag con una URL
-    parser_tag_url = tag_subparsers.add_parser('url', help='Asocia un tag con una URL')
-    parser_tag_url.add_argument('url_id', type=int, help='ID de la URL')
-    parser_tag_url.add_argument('tag_name', help='Nombre del tag a asociar').completer = autocomplete_tags
-    
-    # Comando para listar tags
-    parser_tag_list = tag_subparsers.add_parser('list', help='Lista todos los tags')
-    
-    # Comando para mostrar jerarquía de tags
-    parser_tag_hierarchy = tag_subparsers.add_parser('hierarchy', help='Muestra la jerarquía completa de tags')
-    
-    # Comando para eliminar un tag
-    parser_tag_rm = tag_subparsers.add_parser('rm', help='Elimina un tag')
-    parser_tag_rm.add_argument('name', help='Nombre del tag a eliminar').completer = autocomplete_tags
-    
-    # Comando para actualizar un tag
-    parser_tag_update = tag_subparsers.add_parser('update', help='Actualiza un tag')
-    parser_tag_update.add_argument('name', help='Nombre actual del tag').completer = autocomplete_tags
-    parser_tag_update.add_argument('--new-name', help='Nuevo nombre para el tag')
-    parser_tag_update.add_argument('--description', help='Nueva descripción del tag')
+    tag_parser = subparsers.add_parser('tag', help='Gestiona tags para organizar el historial')
+    tag_subparsers = tag_parser.add_subparsers(dest='tag_command', help='Comandos de tag')
+
+    # Comando tag add
+    add_parser = tag_subparsers.add_parser('add', help='Añade un nuevo tag')
+    add_parser.add_argument('name', help='Nombre del tag').completer = autocomplete_tags
+    add_parser.add_argument('--parent', help='Tag padre').completer = autocomplete_tag_parents
+    add_parser.add_argument('--description', help='Descripción del tag')
+
+    # Comando tag rm
+    rm_parser = tag_subparsers.add_parser('rm', help='Elimina un tag')
+    rm_parser.add_argument('name', help='Nombre del tag a eliminar').completer = autocomplete_tags
+
+    # Comando tag list
+    list_parser = tag_subparsers.add_parser('list', help='Lista todos los tags')
+
+    # Comando tag hierarchy
+    hierarchy_parser = tag_subparsers.add_parser('hierarchy', help='Muestra la jerarquía completa de tags')
+
+    # Comando tag update
+    update_parser = tag_subparsers.add_parser('update', help='Actualiza un tag')
+    update_parser.add_argument('name', help='Nombre del tag a actualizar').completer = autocomplete_tags
+    update_parser.add_argument('--new-name', help='Nuevo nombre del tag')
+    update_parser.add_argument('--description', help='Nueva descripción del tag')
+
+    # Comando tag url rm
+    url_rm_parser = tag_subparsers.add_parser('url rm', help='Elimina una asociación entre URL y tag')
+    url_rm_parser.add_argument('url_id', type=int, help='ID de la URL')
+    url_rm_parser.add_argument('tag_name', help='Nombre del tag a eliminar de la URL').completer = autocomplete_tags
     
     # Manejar el caso de no argumentos
     if len(sys.argv) == 1:
@@ -892,17 +934,19 @@ def main() -> None:
                 tags=args.tags
             )
         elif args.command == 'tag':
-            if args.action == 'add':
+            if args.tag_command == 'add':
                 add_tag(args.name, args.parent, args.description)
-            elif args.action == 'url':
+            elif args.tag_command == 'url':
                 add_tag_to_url(args.url_id, args.tag_name)
-            elif args.action == 'list':
+            elif args.tag_command == 'url rm':
+                remove_tag_from_url(args.url_id, args.tag_name)
+            elif args.tag_command == 'list':
                 list_tags()
-            elif args.action == 'hierarchy':
+            elif args.tag_command == 'hierarchy':
                 show_tag_hierarchy()
-            elif args.action == 'rm':
+            elif args.tag_command == 'rm':
                 remove_tag(args.name)
-            elif args.action == 'update':
+            elif args.tag_command == 'update':
                 update_tag(args.name, args.new_name, args.description)
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
