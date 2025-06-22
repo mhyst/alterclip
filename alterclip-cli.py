@@ -594,7 +594,7 @@ alterclip-cli - Interfaz de línea de comandos para alterclip
     alterclip-cli tag add "Antiguas Civilizaciones" --parent "Arqueología"
 
     # Asociar un tag con una URL
-    alterclip-cli tag url 123 "Arqueología"
+    alterclip-cli tag url add 123 "Arqueología"
 
     # Eliminar una asociación entre URL y tag
     alterclip-cli tag url rm 123 "Arqueología"

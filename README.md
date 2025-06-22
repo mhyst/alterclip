@@ -97,7 +97,7 @@ Ejemplos de uso:
 ./alterclip-cli tag add "Antiguas Civilizaciones" --parent "Arqueología"
 
 # Asociar un tag con una URL
-./alterclip-cli tag url 123 "Arqueología"
+./alterclip-cli tag url add 123 "Arqueología"
 
 # Eliminar la asociación entre una URL y un tag
 ./alterclip-cli tag url rm 123 "Arqueología"
