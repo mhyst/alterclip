@@ -13,7 +13,9 @@ import argcomplete
 import os
 import shlex
 from termcolor import colored
-from alterclip import REPRODUCTOR_VIDEO
+
+
+REPRODUCTOR_VIDEO = "mpv"
 
 conn = None
 
