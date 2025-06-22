@@ -466,6 +466,11 @@ def playall(args) -> None:
                 query += f' AND EXISTS (SELECT 1 FROM url_tags WHERE url_id = sh.id AND tag_id IN ({tag_ids_str}))'
                 params.extend(tag_ids)
         
+        # Filtrar por plataforma si se especifica
+        if args.platform:
+            query += " AND sh.platform = ?"
+            params.append(args.platform)
+        
         # Ordenar y limitar resultados
         query += ' GROUP BY sh.id ORDER BY sh.timestamp DESC'
         if args.limit is not None:
