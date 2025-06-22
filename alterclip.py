@@ -88,17 +88,22 @@ class Alterclip:
         )
 
     def reproducir_streaming(self, url: str):
-        try:
-            proceso = subprocess.Popen(
-                [REPRODUCTOR_VIDEO] + shlex.split(url),
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL
-            )
-            exit_code = proceso.wait()
-            if exit_code != 0:
-                self.mostrar_error(f"La reproducci\u00f3n fall\u00f3\nC\u00f3digo de error: {exit_code}")
-        except Exception as e:
-            self.mostrar_error(f"Error al lanzar el reproductor:\n{e}")
+        def reproducir_en_hilo(url):
+            try:
+                proceso = subprocess.Popen(
+                    [REPRODUCTOR_VIDEO] + shlex.split(url),
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL
+                )
+                exit_code = proceso.wait()
+                if exit_code != 0:
+                    self.mostrar_error(f"La reproducción falló\nCódigo de error: {exit_code}")
+            except Exception as e:
+                self.mostrar_error(f"Error al lanzar el reproductor:\n{e}")
+
+        # Crear y lanzar un nuevo hilo para la reproducción
+        hilo = threading.Thread(target=reproducir_en_hilo, args=(url,), daemon=True)
+        hilo.start()
 
     def es_streaming_compatible(self, url: str) -> bool:
         return any(source in url for source in self.streaming_sources)
