@@ -3,3 +3,4 @@ dist/
 alterclip.egg-info/
 changes/
 nohup.out
+__pycache__/

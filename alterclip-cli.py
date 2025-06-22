@@ -11,7 +11,9 @@ from typing import List, Tuple
 from unidecode import unidecode
 import argcomplete
 import os
+import shlex
 from termcolor import colored
+from alterclip import REPRODUCTOR_VIDEO
 
 conn = None
 
@@ -366,11 +368,13 @@ def play_streaming_url(url_id: int) -> None:
             return
             
         url = result[0]
+        print(f"\nReproduciendo: {url}")
         proceso = subprocess.Popen(
             [REPRODUCTOR_VIDEO] + shlex.split(url),
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL
         )
+        proceso.wait()  # Esperar a que termine la reproducción
     except Exception as e:
         print(f"Error al reproducir URL: {e}", file=sys.stderr)
 
@@ -414,31 +418,87 @@ def playall(args) -> None:
     """Maneja la reproducción múltiple de URLs según los filtros especificados"""
     try:
         # Obtener el historial filtrado
-        history = get_streaming_history(
-            limit=args.limit,
-            no_limit=not args.limit,
-            search=args.search,
-            tags=args.tags
-        )
+        print("Buscando URLs que coincidan con los criterios...")
+        
+        # Primero obtenemos el historial sin imprimirlo
+        cursor = conn.cursor()
+        query = '''
+            SELECT sh.id, sh.url, sh.title, sh.platform, sh.timestamp,
+                   GROUP_CONCAT(DISTINCT t.name) as tags
+            FROM streaming_history sh
+            LEFT JOIN url_tags ut ON sh.id = ut.url_id
+            LEFT JOIN tags t ON ut.tag_id = t.id
+            WHERE 1=1
+        '''
+        
+        # Añadir filtros
+        params = []
+        if args.search:
+            search_term = f"%{args.search}%"
+            query += " AND (sh.title LIKE ? OR sh.url LIKE ?)"
+            params.extend([search_term, search_term])
+        
+        if args.tags:
+            tag_ids = []
+            for tag in args.tags:
+                cursor.execute('SELECT id FROM tags WHERE name = ?', (tag,))
+                tag_id = cursor.fetchone()
+                if tag_id:
+                    tag_ids.append(tag_id[0])
+                    
+                    # Obtener IDs de los tags hijos
+                    cursor.execute('''
+                        WITH RECURSIVE child_tags(id) AS (
+                            SELECT child_id FROM tag_hierarchy WHERE parent_id = ?
+                            UNION ALL
+                            SELECT th.child_id FROM tag_hierarchy th
+                            JOIN child_tags ct ON th.parent_id = ct.id
+                        )
+                        SELECT id FROM child_tags
+                    ''', (tag_id[0],))
+                    child_ids = cursor.fetchall()
+                    tag_ids.extend([child[0] for child in child_ids])
+            
+            if tag_ids:
+                tag_ids_str = ','.join('?' for _ in tag_ids)
+                query += f' AND EXISTS (SELECT 1 FROM url_tags WHERE url_id = sh.id AND tag_id IN ({tag_ids_str}))'
+                params.extend(tag_ids)
+        
+        # Ordenar y limitar resultados
+        query += ' GROUP BY sh.id ORDER BY sh.timestamp DESC'
+        if args.limit is not None:
+            query += ' LIMIT ?'
+            params.append(args.limit)
+        
+        cursor.execute(query, params)
+        history = cursor.fetchall()
         
         if not history:
             print("No se encontraron URLs que coincidan con los criterios de búsqueda", file=sys.stderr)
+            print(f"Criterios de búsqueda:")
+            print(f"- Límite: {args.limit if args.limit is None else 'sin límite'}")
+            print(f"- Búsqueda: {args.search or 'ninguna'}")
+            print(f"- Tags: {', '.join(args.tags) if args.tags else 'ninguno'}")
             return
             
-        # Aplicar ordenamiento según las opciones
-        urls = []
-        for entry in history:
-            urls.append(entry[1])  # La URL está en el índice 1 de cada tupla
+        print(f"\nEncontradas {len(history)} URLs que coinciden con los criterios")
         
+        # Aplicar ordenamiento según las opciones
         if args.reverse:
-            urls.reverse()
+            print("\nReproduciendo en orden inverso...")
+            history.reverse()
         elif args.shuffle:
+            print("\nReproduciendo en orden aleatorio...")
             import random
-            random.shuffle(urls)
+            random.shuffle(history)
+        else:
+            print("\nReproduciendo en orden normal...")
         
         # Reproducir las URLs
-        for url in urls:
-            print(f"\nReproduciendo: {url}")
+        print("\nIniciando reproducción...")
+        for i, entry in enumerate(history, 1):
+            url = entry[1]  # La URL está en el índice 1 de cada tupla
+            print(f"\nReproduciendo video {i}/{len(history)}: {url}")
             proceso = subprocess.Popen(
                 [REPRODUCTOR_VIDEO] + shlex.split(url),
                 stdout=subprocess.DEVNULL,
