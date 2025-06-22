@@ -415,7 +415,7 @@ def remove_streaming_url(url_id: int) -> None:
         cursor = conn.cursor()
         
         # Primero obtenemos la URL para mostrar un mensaje de confirmación
-        cursor.execute('SELECT url FROM streaming_history WHERE id = ?', (url_id,))
+        cursor.execute('SELECT url, title FROM streaming_history WHERE id = ?', (url_id,))
         result = cursor.fetchone()
         
         if not result:
@@ -423,9 +423,11 @@ def remove_streaming_url(url_id: int) -> None:
             return
             
         url = result[0]
+        titulo = result[1]
         print(f"¡Advertencia! Se va a eliminar la siguiente URL del historial:")
         print(f"ID: {url_id}")
         print(f"URL: {url}")
+        print(f"Título: {titulo}")
         
         # Preguntar confirmación
         confirm = input("¿Estás seguro que quieres eliminar esta entrada? (s/n): ").lower()
