@@ -380,6 +380,44 @@ def copy_streaming_url(url_id: int) -> None:
         cursor = conn.cursor()
         
         # Si el ID es negativo, lo convertimos a un ID absoluto
+
+def playall(args) -> None:
+    """Maneja la reproducción múltiple de URLs según los filtros especificados"""
+    try:
+        # Obtener el historial filtrado
+        history = get_streaming_history(
+            limit=args.limit,
+            no_limit=not args.limit,
+            search=args.search,
+            tags=args.tags
+        )
+        
+        if not history:
+            print("No se encontraron URLs que coincidan con los criterios de búsqueda", file=sys.stderr)
+            return
+            
+        # Aplicar ordenamiento según las opciones
+        urls = []
+        for entry in history:
+            urls.append(entry[1])  # La URL está en el índice 1 de cada tupla
+        
+        if args.reverse:
+            urls.reverse()
+        elif args.shuffle:
+            import random
+            random.shuffle(urls)
+        
+        # Reproducir las URLs
+        for url in urls:
+            print(f"\nReproduciendo: {url}")
+            proceso = subprocess.Popen(
+                [REPRODUCTOR_VIDEO] + shlex.split(url),
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL
+            )
+            proceso.wait()  # Esperar a que termine cada video antes de reproducir el siguiente
+    except Exception as e:
+        print(f"Error en playall: {e}", file=sys.stderr)
         if url_id < 0:
             # Obtener el total de entradas
             cursor.execute('SELECT COUNT(*) FROM streaming_history')
@@ -961,6 +999,8 @@ def main() -> None:
                 search=args.search,
                 tags=args.tags
             )
+        elif args.command == 'playall':
+            playall(args)
         elif args.command == 'tag':
             if args.tag_command == 'add':
                 add_tag(args.name, args.parent, args.description)
