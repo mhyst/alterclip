@@ -339,7 +339,53 @@ def remove_tag_from_url(url_id: int, tag_name: str):
 def play_streaming_url(url_id: int) -> None:
     """Reproduce una URL de streaming por su ID (absoluto o relativo)
     Si el ID es negativo, se interpreta como un índice relativo desde el final
-    (ejemplo: -1 = último, -2 = penúltimo, etc.)"""
+    """
+    try:
+        cursor = conn.cursor()
+        
+        # Si el ID es negativo, lo convertimos a un ID absoluto
+        if url_id < 0:
+            # Obtener el total de entradas
+            cursor.execute('SELECT COUNT(*) FROM streaming_history')
+            total_entries = cursor.fetchone()[0]
+            if total_entries == 0:
+                print("No hay entradas en el historial", file=sys.stderr)
+                return
+                
+            if abs(url_id) > total_entries:
+                print(f"Índice relativo {-url_id} fuera de rango", file=sys.stderr)
+                return
+                
+            url_id = total_entries + url_id + 1
+        
+        cursor.execute('SELECT url FROM streaming_history WHERE id = ?', (url_id,))
+        result = cursor.fetchone()
+        
+        if not result:
+            print(f"No se encontró URL con ID {url_id}", file=sys.stderr)
+            return
+            
+        url = result[0]
+        subprocess.run([REPRODUCTOR_VIDEO] + shlex.split(url))
+    except Exception as e:
+        print(f"Error al reproducir URL: {e}", file=sys.stderr)
+
+def play_streaming_urls(urls: List[str]) -> None:
+    """Reproduce una lista de URLs de streaming en secuencia"""
+    try:
+        for url in urls:
+            print(f"\nReproduciendo: {url}")
+            proceso = subprocess.Popen(
+                [REPRODUCTOR_VIDEO] + shlex.split(url),
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL
+            )
+            proceso.wait()  # Esperar a que termine cada video antes de reproducir el siguiente
+    except Exception as e:
+        print(f"Error al reproducir URLs: {e}", file=sys.stderr)
+
+def copy_streaming_url(url_id: int) -> None:
+    """Copia una URL de streaming al portapapeles con prefijo share.only/ usando su ID"""
     try:
         cursor = conn.cursor()
         
@@ -372,11 +418,6 @@ def play_streaming_url(url_id: int) -> None:
     except Exception as e:
         print(f"Error al reproducir URL: {e}", file=sys.stderr)
 
-def copy_streaming_url(url_id: int) -> None:
-    """Copia una URL de streaming al portapapeles con prefijo share.only/ usando su ID"""
-    try:
-        cursor = conn.cursor()
-        
         # Si el ID es negativo, lo convertimos a un ID absoluto
         if url_id < 0:
             # Obtener el total de entradas
@@ -600,6 +641,11 @@ alterclip-cli - Interfaz de línea de comandos para alterclip
 
     # Eliminar una asociación entre URL y tag
     alterclip-cli tag url rm 123 "Arqueología"
+
+    # Reproducir múltiples URLs en secuencia
+    alterclip-cli playall --tags "Filosofía" --shuffle
+    alterclip-cli playall --search "música" --limit 5
+    alterclip-cli playall --platform "YouTube" --reverse
 
     # Buscar URLs con un tag específico
     alterclip-cli hist --tags "Arqueología"
@@ -825,6 +871,7 @@ def main() -> None:
       search [TÉRMINO]   Busca URLs en el historial
       toggle             Alterna entre modo normal y modo alterclip
       hist               Muestra el historial de URLs
+      playall            Reproduce múltiples URLs en secuencia
       tag                Gestiona tags para organizar el historial
     '''
 
@@ -875,6 +922,16 @@ def main() -> None:
     parser_hist.add_argument('--no-limit', action='store_true', help='Muestra todo el historial')
     parser_hist.add_argument('--search', help='Filtro de búsqueda en el título o URL')
     parser_hist.add_argument('--tags', nargs='*', help='Filtro de búsqueda por tags')
+
+    # Comando playall
+    parser_playall = subparsers.add_parser('playall', help='Reproduce múltiples URLs en secuencia')
+    parser_playall.add_argument('--limit', type=int, help='Número máximo de URLs a reproducir')
+    parser_playall.add_argument('--search', help='Filtro de búsqueda en el título o URL')
+    parser_playall.add_argument('--tags', nargs='*', help='Filtro de búsqueda por tags')
+    parser_playall.add_argument('--reverse', action='store_true', help='Reproducir en orden inverso')
+    parser_playall.add_argument('--shuffle', action='store_true', help='Reproducir en orden aleatorio')
+    parser_playall.add_argument('--platform', help='Filtrar por plataforma (YouTube, Instagram, etc.)')
+    parser_playall.add_argument('--since', help='Filtrar por fecha mínima (formato YYYY-MM-DD)')
     
     # Comandos para gestionar tags
     parser_tag = subparsers.add_parser('tag', help='Gestiona tags para organizar el historial')

@@ -61,6 +61,7 @@ El CLI (`alterclip-cli.py`) te permite:
 
 - Ver el historial de vídeos reproducidos con búsqueda avanzada
 - Reproducir cualquier vídeo guardado usando índices absolutos o relativos
+- Reproducir múltiples vídeos en secuencia
 - Copiar URLs al portapapeles con prefijo share.only/ para compartir
 - Eliminar entradas del historial
 - Cambiar el modo de funcionamiento
@@ -80,6 +81,11 @@ Ejemplos de uso:
 
 # Reproducir el último vídeo guardado
 ./alterclip-cli play -1
+
+# Reproducir múltiples vídeos en secuencia
+./alterclip-cli playall --tags "Filosofía" --shuffle
+./alterclip-cli playall --search "música" --limit 5
+./alterclip-cli playall --platform "YouTube" --reverse
 
 # Copiar la URL del penúltimo vídeo al portapapeles
 ./alterclip-cli copy -2
