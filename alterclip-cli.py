@@ -366,23 +366,13 @@ def play_streaming_url(url_id: int) -> None:
             return
             
         url = result[0]
-        subprocess.run([REPRODUCTOR_VIDEO] + shlex.split(url))
+        proceso = subprocess.Popen(
+            [REPRODUCTOR_VIDEO] + shlex.split(url),
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL
+        )
     except Exception as e:
         print(f"Error al reproducir URL: {e}", file=sys.stderr)
-
-def play_streaming_urls(urls: List[str]) -> None:
-    """Reproduce una lista de URLs de streaming en secuencia"""
-    try:
-        for url in urls:
-            print(f"\nReproduciendo: {url}")
-            proceso = subprocess.Popen(
-                [REPRODUCTOR_VIDEO] + shlex.split(url),
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL
-            )
-            proceso.wait()  # Esperar a que termine cada video antes de reproducir el siguiente
-    except Exception as e:
-        print(f"Error al reproducir URLs: {e}", file=sys.stderr)
 
 def copy_streaming_url(url_id: int) -> None:
     """Copia una URL de streaming al portapapeles con prefijo share.only/ usando su ID"""
@@ -398,41 +388,11 @@ def copy_streaming_url(url_id: int) -> None:
                 print("No hay entradas en el historial", file=sys.stderr)
                 return
                 
-            # Convertir ID relativo a absoluto
-            abs_id = total_entries + url_id + 1
-            if abs_id <= 0:
-                print(f"No se puede reproducir una entrada más allá del inicio del historial", file=sys.stderr)
-                return
-            url_id = abs_id
-        
-        cursor.execute('SELECT url FROM streaming_history WHERE id = ?', (url_id,))
-        result = cursor.fetchone()
-        
-        if not result:
-            print(f"No se encontró URL con ID {url_id}", file=sys.stderr)
-            return
-            
-        url = result[0]
-        # Usar el reproductor por defecto (mpv)
-        subprocess.run(['mpv', url], check=True)
-    except Exception as e:
-        print(f"Error al reproducir URL: {e}", file=sys.stderr)
-
-        # Si el ID es negativo, lo convertimos a un ID absoluto
-        if url_id < 0:
-            # Obtener el total de entradas
-            cursor.execute('SELECT COUNT(*) FROM streaming_history')
-            total_entries = cursor.fetchone()[0]
-            if total_entries == 0:
-                print("No hay entradas en el historial", file=sys.stderr)
+            if abs(url_id) > total_entries:
+                print(f"Índice relativo {-url_id} fuera de rango", file=sys.stderr)
                 return
                 
-            # Convertir ID relativo a absoluto
-            abs_id = total_entries + url_id + 1
-            if abs_id <= 0:
-                print(f"No se puede copiar una entrada más allá del inicio del historial", file=sys.stderr)
-                return
-            url_id = abs_id
+            url_id = total_entries + url_id + 1
         
         cursor.execute('SELECT url FROM streaming_history WHERE id = ?', (url_id,))
         result = cursor.fetchone()
