@@ -72,12 +72,25 @@ class AlterclipGUI:
         button_frame = ttk.Frame(self.root)
         button_frame.grid(row=1, column=0, columnspan=2, sticky="ew", padx=5, pady=5)
         
+        # Configurar el grid del frame de botones
+        button_frame.grid_columnconfigure(0, weight=1)
+        button_frame.grid_columnconfigure(1, weight=1)
+        button_frame.grid_columnconfigure(2, weight=1)
+        button_frame.grid_columnconfigure(3, weight=1)
+        
         # Botones
         self.add_button = ttk.Button(button_frame, text="Agregar Tags", command=self.add_selected_tags)
         self.add_button.grid(row=0, column=0, padx=5)
         
         self.remove_button = ttk.Button(button_frame, text="Remover Tags", command=self.remove_selected_tags)
         self.remove_button.grid(row=0, column=1, padx=5)
+        
+        # Botones de recarga
+        self.reload_urls_button = ttk.Button(button_frame, text="Recargar URLs", command=self.reload_urls)
+        self.reload_urls_button.grid(row=0, column=2, padx=5)
+        
+        self.reload_tags_button = ttk.Button(button_frame, text="Recargar Tags", command=self.reload_tags)
+        self.reload_tags_button.grid(row=0, column=3, padx=5)
         
         # Variable para controlar la carga inicial
         self.loading_initial = False
@@ -450,6 +463,34 @@ class AlterclipGUI:
             except Exception as e:
                 print(f"Error al seleccionar URL: {str(e)}")
                 messagebox.showerror("Error", f"Error al seleccionar URL: {str(e)}")
+
+    def reload_urls(self):
+        """Recargar la lista de URLs"""
+        try:
+            # Limpiar la lista actual
+            for item in self.urls_list.get_children():
+                self.urls_list.delete(item)
+            
+            # Cargar las URLs nuevamente
+            self.load_urls()
+            messagebox.showinfo("Éxito", "URLs recargadas correctamente")
+        except Exception as e:
+            print(f"Error al recargar URLs: {str(e)}")
+            messagebox.showerror("Error", f"Error al recargar URLs: {str(e)}")
+
+    def reload_tags(self):
+        """Recargar la lista de tags"""
+        try:
+            # Limpiar la lista actual
+            for item in self.tags_list.get_children():
+                self.tags_list.delete(item)
+            
+            # Cargar los tags nuevamente
+            self.load_tags()
+            messagebox.showinfo("Éxito", "Tags recargados correctamente")
+        except Exception as e:
+            print(f"Error al recargar tags: {str(e)}")
+            messagebox.showerror("Error", f"Error al recargar tags: {str(e)}")
 
     def on_tree_click(self, event):
         """Manejar clics en el Treeview para evitar la expansión de nodos"""
