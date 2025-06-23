@@ -19,11 +19,7 @@ class AlterclipGUI:
         self.root.grid_columnconfigure(0, weight=1)
         self.root.grid_columnconfigure(1, weight=1)
         self.root.grid_rowconfigure(0, weight=1)
-        
-        # Configurar el grid principal
-        self.root.grid_columnconfigure(0, weight=1)
-        self.root.grid_columnconfigure(1, weight=1)
-        self.root.grid_rowconfigure(0, weight=1)
+        self.root.grid_rowconfigure(1, weight=0)
         
         # Frame para la lista de URLs
         self.urls_frame = ttk.LabelFrame(root, text="Historial de URLs", padding="5")
@@ -34,22 +30,18 @@ class AlterclipGUI:
         self.urls_frame.grid_rowconfigure(0, weight=1)
         
         # Treeview para las URLs
-        self.urls_list = ttk.Treeview(self.urls_frame, columns=('ID', 'URL', 'Título', 'Plataforma', 'Tags'), show='headings')
+        self.urls_list = ttk.Treeview(self.urls_frame, columns=('ID', 'Título', 'Plataforma'), show='headings')
         self.urls_list.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
         
         # Configurar las columnas
         self.urls_list.column('ID', width=50)
-        self.urls_list.column('URL', width=300)
-        self.urls_list.column('Título', width=200)
+        self.urls_list.column('Título', width=500)
         self.urls_list.column('Plataforma', width=100)
-        self.urls_list.column('Tags', width=200)
         
         # Configurar las cabeceras
         self.urls_list.heading('ID', text='ID')
-        self.urls_list.heading('URL', text='URL')
         self.urls_list.heading('Título', text='Título')
         self.urls_list.heading('Plataforma', text='Plataforma')
-        self.urls_list.heading('Tags', text='Tags')
         
         # Scrollbar para las URLs
         self.urls_scroll = ttk.Scrollbar(self.urls_frame, orient="vertical", command=self.urls_list.yview)
@@ -65,123 +57,166 @@ class AlterclipGUI:
         self.tags_frame.grid_rowconfigure(0, weight=1)
         
         # Treeview para los tags
-        self.tags_list = ttk.Treeview(self.tags_frame, columns=('Tag',), show='headings')
+        self.tags_list = ttk.Treeview(self.tags_frame, show='tree')
         self.tags_list.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
         
-        # Configurar la columna
-        self.tags_list.column('Tag', width=300)
-        
-        # Configurar la cabecera
-        self.tags_list.heading('Tag', text='Tag')
+        # Deshabilitar la interacción con los triángulos de expansión
+        self.tags_list.bind('<Button-1>', self.on_tree_click)
         
         # Scrollbar para los tags
         self.tags_scroll = ttk.Scrollbar(self.tags_frame, orient="vertical", command=self.tags_list.yview)
         self.tags_scroll.grid(row=0, column=1, sticky="ns")
         self.tags_list.configure(yscrollcommand=self.tags_scroll.set)
         
-        # Configurar estilos para el Treeview de tags
-        style = ttk.Style()
-        style.configure('Treeview', rowheight=25)  # Aumentar la altura de las filas
-        
-        # Aplicar estilos al Treeview de tags
-        self.tags_list.tag_configure('highlight', background='#FFCCCC', foreground='black')
-        self.tags_list.tag_configure('normal', background='white', foreground='black')
+        # Frame para botones
+        button_frame = ttk.Frame(self.root)
+        button_frame.grid(row=1, column=0, columnspan=2, sticky="ew", padx=5, pady=5)
         
         # Botones
-        button_frame = ttk.Frame(root)
-        button_frame.grid(row=1, column=0, columnspan=2, pady=10)
-        
         self.add_button = ttk.Button(button_frame, text="Agregar Tags", command=self.add_selected_tags)
         self.add_button.grid(row=0, column=0, padx=5)
         
         self.remove_button = ttk.Button(button_frame, text="Remover Tags", command=self.remove_selected_tags)
         self.remove_button.grid(row=0, column=1, padx=5)
         
-        # Cargar datos
-        self.load_urls()
-        self.load_tags()
+        # Variable para controlar la carga inicial
+        self.loading_initial = False
         
         # Eventos
         self.urls_list.bind('<<TreeviewSelect>>', self.on_url_select)
-        self.tags_list.bind('<<TreeviewSelect>>', self.on_tag_select)
+        # Solo necesitamos el evento de clic para el Treeview
+        self.tags_list.bind('<Button-1>', self.on_tree_click)
+        
+        # Cargar datos
+        self.loading_initial = True
+        self.load_urls()
+        self.load_tags()
+        self.loading_initial = False
 
-    def load_urls(self):
-        """Cargar las URLs y sus tags en la lista"""
+    def add_selected_tags(self):
+        """Agregar los tags seleccionados a la URL"""
+        if not self.selected_url_id:
+            messagebox.showwarning("Advertencia", "Por favor, seleccione una URL")
+            return
+            
+        if not self.selected_tags:
+            messagebox.showwarning("Advertencia", "Por favor, seleccione al menos un tag")
+            return
+            
         conn = self.create_connection()
         try:
             cursor = conn.cursor()
-            cursor.execute('''
-                SELECT sh.id, sh.url, sh.title, sh.platform, 
-                       GROUP_CONCAT(t.name, ', ') as tags
-                FROM streaming_history sh
-                LEFT JOIN url_tags ut ON sh.id = ut.url_id
-                LEFT JOIN tags t ON ut.tag_id = t.id
-                GROUP BY sh.id, sh.url, sh.title, sh.platform
-                ORDER BY sh.timestamp DESC
-            ''')
             
-            # Limpiar la lista actual
-            for item in self.urls_list.get_children():
-                self.urls_list.delete(item)
+            for tag in self.selected_tags:
+                # Obtener el ID del tag
+                tag_id = self.get_tag_id(tag)
+                if not tag_id:
+                    messagebox.showerror("Error", f"El tag '{tag}' no existe")
+                    conn.close()
+                    return
+                    
+                # Verificar si la asociación ya existe
+                cursor.execute('SELECT 1 FROM url_tags WHERE url_id = ? AND tag_id = ?', (self.selected_url_id, tag_id))
+                if cursor.fetchone():
+                    messagebox.showwarning("Advertencia", f"La URL ya tiene el tag '{tag}'")
+                    conn.close()
+                    return
+                    
+                # Crear la asociación
+                cursor.execute('INSERT INTO url_tags (url_id, tag_id) VALUES (?, ?)', (self.selected_url_id, tag_id))
             
-            # Insertar los nuevos datos
-            for row in cursor.fetchall():
-                url_id = row[0]
-                url = row[1]
-                title = row[2]
-                platform = row[3]
-                tags = row[4] if row[4] else ''
-                self.urls_list.insert('', 'end', values=(url_id, url, title, platform, tags))
+            conn.commit()
+            messagebox.showinfo("Éxito", "Tags agregados correctamente")
+            self.update_tag_visualization(self.selected_url_id)  # Refrescar la visualización
+            self.selected_tags.clear()
+            self.update_buttons()
             
+        except sqlite3.Error as e:
+            messagebox.showerror("Error", f"Error al agregar tags: {str(e)}")
+            conn.rollback()
         finally:
             conn.close()
 
-    def load_tags(self):
-        """Cargar los tags en la lista"""
-        # Obtener la jerarquía de tags
-        tags = self.get_tag_hierarchy()
+    def remove_selected_tags(self):
+        """Remover los tags seleccionados de la URL"""
+        if not self.selected_url_id:
+            messagebox.showwarning("Advertencia", "Por favor, seleccione una URL")
+            return
+            
+        if not self.selected_tags:
+            messagebox.showwarning("Advertencia", "Por favor, seleccione al menos un tag")
+            return
+            
+        conn = self.create_connection()
+        cursor = conn.cursor()
         
-        # Limpiar la lista actual
-        for item in self.tags_list.get_children():
-            self.tags_list.delete(item)
+        for tag in self.selected_tags:
+            # Obtener el ID del tag
+            tag_id = self.get_tag_id(tag)
+            if not tag_id:
+                messagebox.showerror("Error", f"El tag '{tag}' no existe")
+                conn.close()
+                return
+                
+            # Eliminar la asociación
+            cursor.execute('DELETE FROM url_tags WHERE url_id = ? AND tag_id = ?', (self.selected_url_id, tag_id))
+            
+            if cursor.rowcount == 0:
+                messagebox.showwarning("Advertencia", f"La URL no tiene el tag '{tag}'")
+                conn.close()
+                return
+                
+        conn.commit()
+        conn.close()
         
-        # Insertar los tags con su jerarquía
-        self._insert_tags_recursive(tags)
-        
-        # Expandir todos los tags que tienen hijos
-        for item in self.tags_list.get_children():
-            if self.tags_list.item(item)['open']:
-                self.tags_list.item(item, open=True)
-        
-        # Obtener la jerarquía de tags
-        tags = self.get_tag_hierarchy()
-        
-        # Limpiar la lista actual
-        for item in self.tags_list.get_children():
-            self.tags_list.delete(item)
-        
-        # Insertar los tags con su jerarquía
-        self._insert_tags_recursive(tags)
-        
-        # Expandir todos los tags que tienen hijos
-        for item in self.tags_list.get_children():
-            if self.tags_list.item(item)['open']:
-                self.tags_list.item(item, open=True)
+        messagebox.showinfo("Éxito", "Tags removidos correctamente")
+        self.update_tag_visualization(self.selected_url_id)  # Refrescar la visualización
+        self.selected_tags.clear()
+        self.update_buttons()
 
-    def _insert_tags_recursive(self, tags, parent=''):
-        """Insertar tags recursivamente manteniendo la jerarquía"""
-        for tag in tags:
-            if tag['level'] == 0:
-                formatted_tag = tag['name']
-            else:
-                formatted_tag = '└─ ' + '  ' * (tag['level'] - 1) + tag['name']
-            # Insertar el tag con el estilo por defecto
-            item = self.tags_list.insert(parent, 'end', values=(formatted_tag,), tags=('normal',))
-            if tag['children']:
-                self._insert_tags_recursive(tag['children'], item)
-                self.tags_list.item(item, open=True)
-                # Expandir automáticamente los tags con hijos
-                self.tags_list.item(item, open=True)
+    def add_selected_tags(self):
+        """Agregar los tags seleccionados a la URL"""
+        if not self.selected_url_id:
+            messagebox.showwarning("Advertencia", "Por favor, seleccione una URL")
+            return
+            
+        if not self.selected_tags:
+            messagebox.showwarning("Advertencia", "Por favor, seleccione al menos un tag")
+            return
+            
+        conn = self.create_connection()
+        try:
+            cursor = conn.cursor()
+            
+            for tag in self.selected_tags:
+                # Obtener el ID del tag
+                tag_id = self.get_tag_id(tag)
+                if not tag_id:
+                    messagebox.showerror("Error", f"El tag '{tag}' no existe")
+                    conn.close()
+                    return
+                    
+                # Verificar si la asociación ya existe
+                cursor.execute('SELECT 1 FROM url_tags WHERE url_id = ? AND tag_id = ?', (self.selected_url_id, tag_id))
+                if cursor.fetchone():
+                    messagebox.showwarning("Advertencia", f"La URL ya tiene el tag '{tag}'")
+                    conn.close()
+                    return
+                    
+                # Crear la asociación
+                cursor.execute('INSERT INTO url_tags (url_id, tag_id) VALUES (?, ?)', (self.selected_url_id, tag_id))
+            
+            conn.commit()
+            messagebox.showinfo("Éxito", "Tags agregados correctamente")
+            self.update_tag_visualization(self.selected_url_id)  # Refrescar la visualización
+            self.selected_tags.clear()
+            self.update_buttons()
+            
+        except sqlite3.Error as e:
+            messagebox.showerror("Error", f"Error al agregar tags: {str(e)}")
+            conn.rollback()
+        finally:
+            conn.close()
 
     def get_db_path(self):
         """Obtiene la ruta de la base de datos"""
@@ -194,8 +229,6 @@ class AlterclipGUI:
         """Crea una conexión a la base de datos"""
         conn = sqlite3.connect(str(self.get_db_path()))
         return conn
-                
-        # Configurar el estilo para los ítems de flecha
 
     def get_tag_id(self, tag_name):
         """Obtiene el ID de un tag por su nombre"""
@@ -212,266 +245,300 @@ class AlterclipGUI:
         return result[0] if result else None
 
     def get_url_tags(self, url_id):
-        """Obtiene los tags asociados a una URL"""
+        """Obtener los tags asociados a una URL"""
         conn = self.create_connection()
         try:
             cursor = conn.cursor()
-            cursor.execute('SELECT t.name FROM tags t JOIN url_tags ut ON t.id = ut.tag_id WHERE ut.url_id = ?', (url_id,))
-            tags = [row[0].strip() for row in cursor.fetchall()]
-            return tags
+            cursor.execute('''
+                SELECT t.name
+                FROM tags t
+                JOIN url_tags ut ON t.id = ut.tag_id
+                WHERE ut.url_id = ?
+            ''', (url_id,))
+            
+            # Obtener los nombres de los tags
+            return {row[0] for row in cursor.fetchall()}
+            
+        except sqlite3.Error as e:
+            print(f"Error al obtener tags de URL: {str(e)}")
+            return set()
         finally:
             conn.close()
 
-    def get_tag_hierarchy(self, tag_name=None, level=0):
-        """Obtiene la jerarquía de tags, opcionalmente desde un tag específico"""
+    def get_tag_hierarchy(self):
+        """Obtiene la jerarquía de tags desde la base de datos"""
         conn = self.create_connection()
-        cursor = conn.cursor()
-        
-        # Obtener todos los tags y su jerarquía
-        cursor.execute('''
-            SELECT t1.name as parent_name, t1.id as parent_id,
-                   t2.name as child_name, t2.id as child_id
-            FROM tags t1
-            LEFT JOIN tag_hierarchy th ON t1.id = th.parent_id
-            LEFT JOIN tags t2 ON th.child_id = t2.id
-            WHERE t1.id NOT IN (
-                SELECT child_id FROM tag_hierarchy
-            )
-            ORDER BY t1.name, t2.name
-        ''')
-        
-        # Crear estructura de jerarquía
-        hierarchy = {}
-        for row in cursor.fetchall():
-            parent_name = row[0]
-            parent_id = row[1]
-            child_name = row[2]
-            child_id = row[3]
+        try:
+            cursor = conn.cursor()
             
-            if parent_name not in hierarchy:
-                hierarchy[parent_name] = {
-                    'name': parent_name,
-                    'id': parent_id,
-                    'level': 0,
-                    'children': []
-                }
+            # Obtener todos los tags y sus relaciones
+            cursor.execute('''
+                SELECT t1.id, t1.name, th.parent_id
+                FROM tags t1
+                LEFT JOIN tag_hierarchy th ON t1.id = th.child_id
+            ''')
             
-            if child_name and child_name != parent_name:
-                child = {
-                    'name': child_name,
-                    'id': child_id,
-                    'level': 1,
-                    'children': []
-                }
-                hierarchy[parent_name]['children'].append(child)
+            # Crear la estructura jerárquica
+            def build_hierarchy(tags):
+                # Primero, obtener todos los tags raíz (sin padre)
+                roots = [tag for tag in tags if tag[2] is None]
+                
+                # Función auxiliar para obtener hijos directos
+                def get_children(tags, parent_id):
+                    return [tag for tag in tags if tag[2] == parent_id]
+                
+                # Función recursiva para construir la jerarquía
+                def build_tree(tag_id):
+                    children = get_children(tags, tag_id)
+                    return [{
+                        'id': child[0],
+                        'name': child[1],
+                        'children': build_tree(child[0]) if child[0] != tag_id else []
+                    } for child in children]
+                
+                # Construir la jerarquía a partir de las raíces
+                return [{
+                    'id': root[0],
+                    'name': root[1],
+                    'children': build_tree(root[0])
+                } for root in roots]
+            
+            tags = cursor.fetchall()
+            return build_hierarchy(tags)
+            
+        except sqlite3.Error as e:
+            print(f"Error al obtener jerarquía de tags: {str(e)}")
+            messagebox.showerror("Error", f"Error al obtener jerarquía de tags: {str(e)}")
+            return []
+        finally:
+            conn.close()
+
+    def load_urls(self):
+        """Cargar las URLs y sus tags en la lista"""
+        conn = self.create_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT sh.id, sh.title, sh.platform
+                FROM streaming_history sh
+                ORDER BY sh.timestamp DESC
+            ''')
+            
+            # Limpiar la lista actual
+            for item in self.urls_list.get_children():
+                self.urls_list.delete(item)
+            
+            # Insertar los nuevos datos
+            for row in cursor.fetchall():
+                url_id = row[0]
+                title = row[1]
+                platform = row[2]
+                self.urls_list.insert('', 'end', values=(url_id, title, platform))
+            
+        except sqlite3.Error as e:
+            print(f"Error al cargar URLs: {str(e)}")
+            messagebox.showerror("Error", f"Error al cargar URLs: {str(e)}")
+        finally:
+            conn.close()
+
+    def load_tags(self):
+        """Cargar los tags en la lista"""
+        try:
+            # Establecer bandera de carga
+            self.loading_initial = True
+            
+            # Obtener la jerarquía de tags
+            tags = self.get_tag_hierarchy()
+            
+            # Limpiar la lista actual
+            for item in self.tags_list.get_children():
+                self.tags_list.delete(item)
+            
+            # Insertar los tags con su jerarquía
+            self._insert_tags_recursive(tags)
+            
+            # Expandir todos los tags que tienen hijos
+            for item in self.tags_list.get_children():
+                self.tags_list.item(item, open=True)
+            
+            # Deshabilitar la expansión de nodos
+            for item in self.tags_list.get_children():
+                self.tags_list.item(item, open=True, tags=('no_expand',))
+            
+            # No llamamos a update_tag_visualization aquí porque no hay URL seleccionada
+            print("Tags cargados exitosamente")  # Debug
+            
+        except Exception as e:
+            print(f"Error al cargar tags: {str(e)}")
+            messagebox.showerror("Error", f"Error al cargar los tags: {str(e)}")
+        finally:
+            # Restaurar bandera de carga
+            self.loading_initial = False
+            # Asegurarse de que los eventos estén habilitados
+            self.tags_list.bind('<Button-1>', self.on_tree_click)
+
+    def _insert_tags_recursive(self, tags, parent='', level=0):
+
+        """Insertar tags recursivamente manteniendo la jerarquía"""
+        for tag in tags:
+            original_name = tag['name']
+            
+            # Insertar el tag con el estilo por defecto y el nombre original
+            item = self.tags_list.insert(parent, 'end', 
+                                        tags=('normal',), 
+                                        text=tag['name'])
+            
+            if tag['children']:
+                # Expandir los nodos que tienen hijos
+                self._insert_tags_recursive(tag['children'], item, level + 1)
+                self.tags_list.item(item, open=True)
+
+        if self.loading_initial:
+            return
+
+        if not self.selected_url_id:
+            messagebox.showwarning("Advertencia", "Selecciona una URL primero")
+            return
         
-        # Convertir la jerarquía a lista
-        tags = []
-        for tag_data in hierarchy.values():
-            tags.append(tag_data)
+        if not self.selected_tags:
+            messagebox.showwarning("Advertencia", "Selecciona al menos un tag")
+            return
         
-        conn.close()
-        return tags
+        conn = self.create_connection()
+        try:
+            cursor = conn.cursor()
+            
+            # Eliminar cada tag seleccionado
+            for tag in self.selected_tags:
+                tag_id = self.get_tag_id(tag)
+                if tag_id:
+                    # Eliminar la asociación
+                    cursor.execute('DELETE FROM url_tags WHERE url_id = ? AND tag_id = ?', 
+                                 (self.selected_url_id, tag_id))
+                    
+                    if cursor.rowcount == 0:
+                        messagebox.showwarning("Advertencia", f"La URL no tiene el tag '{tag}'")
+                        continue
+            
+            conn.commit()
+            
+            messagebox.showinfo("Éxito", "Tags removidos correctamente")
+            self.update_tag_visualization(self.selected_url_id)  # Refrescar la visualización
+            self.selected_tags.clear()
+            self.update_buttons()
+            
+        except sqlite3.Error as e:
+            conn.rollback()
+            messagebox.showerror("Error", f"Error al remover tags: {str(e)}")
+        finally:
+            conn.close()
+
+    def on_url_select(self, event):
+        """Manejar la selección de una URL"""
+        selected_item = self.urls_list.selection()
+        if selected_item:
+            item = selected_item[0]
+            try:
+                url_id = self.urls_list.item(item)['values'][0]
+                self.selected_url_id = url_id
+                
+                # Actualizar la visualización de los tags
+                self.update_tag_visualization(url_id)
+                
+                # Actualizar los botones
+                self.update_buttons()
+            except Exception as e:
+                print(f"Error al seleccionar URL: {str(e)}")
+                messagebox.showerror("Error", f"Error al seleccionar URL: {str(e)}")
+
+    def on_tree_click(self, event):
+        """Manejar clics en el Treeview para evitar la expansión de nodos"""
+        # Ignorar eventos durante la carga inicial
+        if self.loading_initial:
+            return
+            
+        # Obtener el item que recibió el clic
+        item = self.tags_list.identify_row(event.y)
+        
+        # Si se hizo clic en un triángulo de expansión, evitar la expansión
+        bbox = self.tags_list.bbox(item)
+        if bbox and bbox[0] <= event.x <= bbox[0] + 20:  # 20px es el ancho aproximado del triángulo
+            return "break"  # Evitar la expansión
+            
+        # Manejar la selección del tag
+        self.on_tag_select(event)
+
+    def on_tag_select(self, event):
+        """Manejar la selección de un tag"""
+        # Ignorar eventos durante la carga inicial
+        if self.loading_initial:
+            return
+            
+        selection = self.tags_list.selection()
+        if selection:
+            item = self.tags_list.item(selection[0])
+            # Obtener el nombre del tag (usando text en lugar de values)
+            tag = item['text']
+            
+            if not self.selected_url_id:
+                messagebox.showwarning("Advertencia", "Selecciona una URL primero")
+                return
+            
+            # Si el tag ya está seleccionado, deseleccionarlo
+            if tag in self.selected_tags:
+                self.selected_tags.remove(tag)
+            else:
+                self.selected_tags.add(tag)
+            
+            self.update_buttons()
 
     def update_tag_visualization(self, url_id):
         """Actualizar la visualización de los tags según su asociación con la URL"""
         # Configurar el estilo para los tags asociados
         self.tags_list.tag_configure('associated', foreground='red')
         
-        # Limpiar la lista actual
-        for item in self.tags_list.get_children():
-            self.tags_list.delete(item)
-        
         # Obtener los tags asociados
         associated_tags = self.get_url_tags(url_id)
+        print(f"Tags asociados obtenidos: {associated_tags}")  # Debug
         
-        # Obtener la jerarquía de tags
-        tags = self.get_tag_hierarchy()
+        # Limpiar todos los estilos actuales
+        for item in self.tags_list.get_children():
+            self.tags_list.item(item, tags=('normal',))
+            for child in self.tags_list.get_children(item):
+                self.tags_list.item(child, tags=('normal',))
         
-        # Insertar los tags en la lista con su jerarquía
-        for tag in tags:
-            # Formatear el tag con su jerarquía
-            formatted_tag = '└─ ' + '  ' * tag['level'] + tag['name']
+        # Función auxiliar para recorrer todos los items recursivamente
+        def process_item(item_id):
+            # Obtener el nombre del tag (usando text en lugar de values)
+            tag_name = self.tags_list.item(item_id)['text']
+            print(f"Comparando tag: {tag_name} con tags asociados")  # Debug
             
-            # Insertar el tag en la lista
-            self.tags_list.insert('', 'end', values=(formatted_tag,))
+            # Verificar si el tag está en la lista de tags asociados
+            if tag_name in associated_tags:
+                print(f"¡Encontrado! Tag {tag_name} está en los asociados")  # Debug
+                # Aplicar el estilo asociado
+                self.tags_list.item(item_id, tags=('associated',))
             
-            # Marcar los tags asociados con rojo
-            if tag['name'] in associated_tags:
-                # Buscar el tag en la lista
-                found = False
-                for item in self.tags_list.get_children():
-                    values = self.tags_list.item(item)['values']
-                    if values and values[0].strip() == formatted_tag.strip():
-                        # Cambiar el color a rojo
-                        self.tags_list.item(item, tags=('associated',))
-                        found = True
-                        break
-                
-                if not found:
-                    print(f"Advertencia: No se encontró el tag '{tag['name']}' en la lista")
+            # Procesar los hijos
+            children = self.tags_list.get_children(item_id)
+            for child in children:
+                process_item(child)
         
-        # Configurar el estilo para los tags asociados
-        self.tags_list.tag_configure('associated', foreground='red')
+        # Iniciar el procesamiento desde la raíz
+        root_items = self.tags_list.get_children()
+        for item in root_items:
+            process_item(item)
+        
+        # Expandir todos los tags que tienen hijos
+        for item in self.tags_list.get_children():
+            self.tags_list.item(item, open=True)
+        
+        print("Visualización de tags actualizada")  # Debug
 
-    def on_url_select(self, event):
-        """Manejar la selección de una URL"""
-        selection = self.urls_list.selection()
-        if selection:
-            item = self.urls_list.item(selection[0])
-            # Obtener el ID de la URL (primera columna)
-            url_id = item['values'][0]
-            if url_id:
-                self.selected_url_id = url_id
-                
-                # Actualizar los colores de los tags asociados
-                # Primero obtener los tags asociados
-                associated_tags = self.get_url_tags(url_id)
-                print(f"Tags asociados a la URL: {associated_tags}")  # Para debugging
-                
-                # Limpiar todos los estilos existentes
-                for item in self.tags_list.get_children():
-                    # Restaurar el estilo normal y deseleccionar
-                    self.tags_list.item(item, tags=('normal',))
-                    self.tags_list.selection_remove(item)
-                
-                # Aplicar el estilo a los tags asociados
-                for item in self.tags_list.get_children():
-                    # Obtener el nombre del tag
-                    values = self.tags_list.item(item)['values']
-                    if values:
-                        tag_name = values[0]
-                        # Limpiar el nombre del tag eliminando prefijos como '└─ '
-                        clean_tag_name = tag_name.strip()
-                        if clean_tag_name.startswith('└─ '):
-                            clean_tag_name = clean_tag_name[3:].strip()
-                        
-                        # Buscar el tag en la base de datos para obtener su nombre original
-                        tag_id = self.get_tag_id(tag_name)
-                        if tag_id:
-                            conn = self.create_connection()
-                            cursor = conn.cursor()
-                            cursor.execute('SELECT name FROM tags WHERE id = ?', (tag_id,))
-                            original_tag_name = cursor.fetchone()[0]
-                            conn.close()
-                            
-                            # Comparar con el nombre original del tag
-                            if original_tag_name in associated_tags:
-                                # Seleccionar visualmente el tag y aplicar estilo highlight
-                                self.tags_list.selection_add(item)
-                                self.tags_list.item(item, tags=('highlight',))
-                                print(f"Se resaltará: {tag_name} (original: {original_tag_name})")  # Para debugging
-                            else:
-                                print(f"No se resaltará: {tag_name} (original: {original_tag_name})")  # Para debugging
-                        else:
-                            print(f"No se encontró ID para el tag: {tag_name}")  # Para debugging
-            else:
-                print("ID de URL no válido")  # Para debugging
-
-    def on_tag_select(self, event):
-        """Manejar la selección de tags"""
-        selection = self.tags_list.selection()
-        if selection:
-            # Obtener el nombre del tag
-            tag = self.tags_list.item(selection[0])['values'][0]
-            
-            # Limpiar el nombre eliminando prefijos como '└─ '
-            clean_tag = tag.strip()
-            if clean_tag.startswith('└─ '):
-                clean_tag = clean_tag[3:].strip()
-            
-            # Actualizar la selección
-            if clean_tag not in self.selected_tags:
-                self.selected_tags.add(clean_tag)
-            else:
-                self.selected_tags.remove(clean_tag)
-            
-            self.update_buttons()
-
-    
     def update_buttons(self):
         """Actualizar el estado de los botones"""
-        url_selected = self.selected_url_id is not None
-        tags_selected = len(self.selected_tags) > 0
-        
-        self.add_button.config(state='normal' if url_selected and tags_selected else 'disabled')
-        self.remove_button.config(state='normal' if url_selected and tags_selected else 'disabled')
-    
-    def add_selected_tags(self):
-        """Agregar los tags seleccionados a la URL"""
-        if not self.selected_url_id:
-            messagebox.showwarning("Advertencia", "Por favor, seleccione una URL")
-            return
-        
-        if not self.selected_tags:
-            messagebox.showwarning("Advertencia", "Por favor, seleccione al menos un tag")
-            return
-        
-        conn = self.create_connection()
-        cursor = conn.cursor()
-        
-        for tag in self.selected_tags:
-            # Obtener el ID del tag
-            tag_id = self.get_tag_id(tag)
-            if not tag_id:
-                messagebox.showerror("Error", f"El tag '{tag}' no existe")
-                conn.close()
-                return
-            
-            # Verificar si la asociación ya existe
-            cursor.execute('SELECT 1 FROM url_tags WHERE url_id = ? AND tag_id = ?', (self.selected_url_id, tag_id))
-            if cursor.fetchone():
-                messagebox.showwarning("Advertencia", f"La URL ya tiene el tag '{tag}'")
-                conn.close()
-                return
-            
-            # Crear la asociación
-            cursor.execute('INSERT INTO url_tags (url_id, tag_id) VALUES (?, ?)', (self.selected_url_id, tag_id))
-            
-        conn.commit()
-        conn.close()
-        
-        messagebox.showinfo("Éxito", "Tags agregados correctamente")
-        self.load_urls()  # Refrescar la lista de URLs
-        self.selected_tags.clear()
-        self.update_buttons()
-    
-    def remove_selected_tags(self):
-        """Remover los tags seleccionados de la URL"""
-        if not self.selected_url_id:
-            messagebox.showwarning("Advertencia", "Por favor, seleccione una URL")
-            return
-        
-        if not self.selected_tags:
-            messagebox.showwarning("Advertencia", "Por favor, seleccione al menos un tag")
-            return
-        
-        conn = self.create_connection()
-        cursor = conn.cursor()
-        
-        for tag in self.selected_tags:
-            # Obtener el ID del tag
-            tag_id = self.get_tag_id(tag)
-            if not tag_id:
-                messagebox.showerror("Error", f"El tag '{tag}' no existe")
-                conn.close()
-                return
-            
-            # Eliminar la asociación
-            cursor.execute('DELETE FROM url_tags WHERE url_id = ? AND tag_id = ?', (self.selected_url_id, tag_id))
-            
-            if cursor.rowcount == 0:
-                messagebox.showwarning("Advertencia", f"La URL no tiene el tag '{tag}'")
-                conn.close()
-                return
-            
-        conn.commit()
-        conn.close()
-        
-        messagebox.showinfo("Éxito", "Tags removidos correctamente")
-        self.load_urls()  # Refrescar la lista de URLs
-        self.selected_tags.clear()
-        self.update_buttons()
+        self.add_button['state'] = 'normal' if self.selected_url_id and self.selected_tags else 'disabled'
+        self.remove_button['state'] = 'normal' if self.selected_url_id and self.selected_tags else 'disabled'
 
 if __name__ == "__main__":
     root = tk.Tk()
