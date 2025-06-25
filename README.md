@@ -60,6 +60,7 @@
 El CLI (`alterclip-cli.py`) te permite:
 
 - Ver el historial de vídeos reproducidos con búsqueda avanzada
+- Ver solo URLs sin tags usando `hist --no-tags`
 - Reproducir cualquier vídeo guardado usando índices absolutos o relativos
 - Reproducir múltiples vídeos en secuencia
 - Copiar URLs al portapapeles con prefijo share.only/ para compartir
@@ -72,6 +73,9 @@ Ejemplos de uso:
 ```bash
 # Ver historial completo
 ./alterclip-cli hist
+
+# Ver solo URLs sin tags
+./alterclip-cli hist --no-tags
 
 # Ver solo las últimas 5 entradas
 ./alterclip-cli hist --limit 5

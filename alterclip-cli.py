@@ -106,12 +106,13 @@ def format_history_entry(entry: Tuple[int, str, str, str, str, List[str]]) -> st
 {colored('Tags:', 'yellow')} {tags_str}
 {colored('─' * 80, 'white', attrs=['dark'])}"""
 
-def get_streaming_history(limit: int = 10, no_limit: bool = False, search: str = None, tags: List[str] = None) -> None:
+def get_streaming_history(limit: int = 10, no_limit: bool = False, search: str = None, tags: List[str] = None, no_tags: bool = False) -> None:
     """Obtiene el historial de URLs de streaming con sus tags asociados
     Si no_limit es True, muestra todo el historial
     Si no_limit es False y limit es None, muestra 10 entradas por defecto
     Si search no es None, muestra solo las entradas que contengan la cadena de búsqueda en el título o URL
     Si tags no es None, muestra solo las entradas que tengan al menos uno de los tags especificados
+    Si --no-tags está especificado, muestra solo las URLs sin tags asociados
     También muestra URLs relacionadas con tags hijos y padres de los especificados"""
     try:
         cursor = conn.cursor()
@@ -180,6 +181,12 @@ def get_streaming_history(limit: int = 10, no_limit: bool = False, search: str =
             # Convertir tags a lista para todas las entradas
             entries = [(entry[0], entry[1], entry[2], entry[3], entry[4], entry[5].split(',') if entry[5] else [])
                       for entry in all_entries]
+            
+            # Si se especificó --no-tags, filtramos las entradas sin tags
+            if no_tags:
+                entries = [(url_id, url, title, platform, timestamp, tags_list)
+                         for url_id, url, title, platform, timestamp, tags_list in entries
+                         if not tags_list]
             
         # Si hay tags, filtramos por tags
         if tags:
@@ -936,6 +943,7 @@ def main() -> None:
       search [TÉRMINO]   Busca URLs en el historial
       toggle             Alterna entre modo normal y modo alterclip
       hist               Muestra el historial de URLs
+      hist --no-tags     Muestra solo URLs sin tags
       playall            Reproduce múltiples URLs en secuencia
       tag                Gestiona tags para organizar el historial
     '''
@@ -987,6 +995,7 @@ def main() -> None:
     parser_hist.add_argument('--no-limit', action='store_true', help='Muestra todo el historial')
     parser_hist.add_argument('--search', help='Filtro de búsqueda en el título o URL')
     parser_hist.add_argument('--tags', nargs='*', help='Filtro de búsqueda por tags')
+    parser_hist.add_argument('--no-tags', action='store_true', help='Muestra solo las URLs sin tags')
 
     # Comando playall
     parser_playall = subparsers.add_parser('playall', help='Reproduce múltiples URLs en secuencia')
@@ -1064,7 +1073,8 @@ def main() -> None:
                 limit=args.limit,
                 no_limit=args.no_limit,
                 search=args.search,
-                tags=args.tags
+                tags=args.tags,
+                no_tags=args.no_tags
             )
         elif args.command == 'playall':
             playall(args)
