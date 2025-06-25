@@ -13,6 +13,7 @@ import argcomplete
 import os
 import shlex
 from termcolor import colored
+import unicodedata
 
 
 REPRODUCTOR_VIDEO = "mpv"
@@ -44,6 +45,7 @@ def get_db_path() -> Path:
 def create_connection() -> sqlite3.Connection:
     """Crea una conexión a la base de datos"""
     conn = sqlite3.connect(get_db_path())
+    conn.create_function("remove_accents", 1, remove_accents)
     return conn
 
 def get_db_connection() -> sqlite3.Connection:
@@ -53,31 +55,41 @@ def get_db_connection() -> sqlite3.Connection:
         conn = create_connection()
     return conn
 
-def remove_accents(input_str: str) -> str:
+def remove_accents(text):
     """Elimina los acentos de una cadena de texto"""
-    replacements = {
-        'á': 'a', 'à': 'a', 'â': 'a', 'ä': 'a', 'ã': 'a', 'å': 'a',
-        'é': 'e', 'è': 'e', 'ê': 'e', 'ë': 'e',
-        'í': 'i', 'ì': 'i', 'î': 'i', 'ï': 'i',
-        'ó': 'o', 'ò': 'o', 'ô': 'o', 'ö': 'o', 'õ': 'o', 'ø': 'o',
-        'ú': 'u', 'ù': 'u', 'û': 'u', 'ü': 'u',
-        'ñ': 'n', 'ç': 'c',
-        'Á': 'A', 'À': 'A', 'Â': 'A', 'Ä': 'A', 'Ã': 'A', 'Å': 'A',
-        'É': 'E', 'È': 'E', 'Ê': 'E', 'Ë': 'E',
-        'Í': 'I', 'Ì': 'I', 'Î': 'I', 'Ï': 'I',
-        'Ó': 'O', 'Ò': 'O', 'Ô': 'O', 'Ö': 'O', 'Õ': 'O', 'Ø': 'O',
-        'Ú': 'U', 'Ù': 'U', 'Û': 'U', 'Ü': 'U',
-        'Ñ': 'N', 'Ç': 'C'
-    }
+    if not isinstance(text, str):
+        return ""
+
+    return ''.join(
+        c for c in unicodedata.normalize('NFD', text)
+        if unicodedata.category(c) != 'Mn'
+    ).lower()
+
+# def remove_accents(input_str: str) -> str:
+#     """Elimina los acentos de una cadena de texto"""
+#     replacements = {
+#         'á': 'a', 'à': 'a', 'â': 'a', 'ä': 'a', 'ã': 'a', 'å': 'a',
+#         'é': 'e', 'è': 'e', 'ê': 'e', 'ë': 'e',
+#         'í': 'i', 'ì': 'i', 'î': 'i', 'ï': 'i',
+#         'ó': 'o', 'ò': 'o', 'ô': 'o', 'ö': 'o', 'õ': 'o', 'ø': 'o',
+#         'ú': 'u', 'ù': 'u', 'û': 'u', 'ü': 'u',
+#         'ñ': 'n', 'ç': 'c',
+#         'Á': 'A', 'À': 'A', 'Â': 'A', 'Ä': 'A', 'Ã': 'A', 'Å': 'A',
+#         'É': 'E', 'È': 'E', 'Ê': 'E', 'Ë': 'E',
+#         'Í': 'I', 'Ì': 'I', 'Î': 'I', 'Ï': 'I',
+#         'Ó': 'O', 'Ò': 'O', 'Ô': 'O', 'Ö': 'O', 'Õ': 'O', 'Ø': 'O',
+#         'Ú': 'U', 'Ù': 'U', 'Û': 'U', 'Ü': 'U',
+#         'Ñ': 'N', 'Ç': 'C'
+#     }
     
-    # Primero convertimos a minúsculas
-    input_str = input_str.lower()
+#     # Primero convertimos a minúsculas
+#     input_str = input_str.lower()
     
-    # Luego reemplazamos los caracteres
-    for original, replacement in replacements.items():
-        input_str = input_str.replace(original, replacement)
+#     # Luego reemplazamos los caracteres
+#     for original, replacement in replacements.items():
+#         input_str = input_str.replace(original, replacement)
     
-    return input_str
+#     return input_str
 
 def format_history_entry(entry: Tuple[int, str, str, str, str, List[str]]) -> str:
     """Formatea una entrada del historial para mostrar en la salida"""
@@ -129,64 +141,26 @@ def get_streaming_history(limit: int = 10, no_limit: bool = False, search: str =
             FROM streaming_history sh
             LEFT JOIN url_tags ut ON sh.id = ut.url_id
             LEFT JOIN tags t ON ut.tag_id = t.id
+            WHERE remove_accents(sh.title) LIKE ? OR remove_accents(sh.url) LIKE ?
             GROUP BY sh.id, sh.url, sh.title, sh.platform, sh.timestamp
             ORDER BY sh.timestamp DESC
-        ''')
+        ''', (f"%{remove_accents(search)}%", f"%{remove_accents(search)}%"))
         
         all_entries = cursor.fetchall()
         
         if not all_entries:
-            print("No hay historial disponible")
+            print("No hay coincidencias con tu búsqueda")
             return
-            
-        # Si hay búsqueda, filtramos los resultados
-        if search:
-            search_term = remove_accents(search.lower())
-            search_term_upper = search.upper()
-            
-            results = []
-            for entry in all_entries:
-                url_id = entry[0]
-                url = entry[1]
-                title = entry[2]
-                platform = entry[3]
-                timestamp = entry[4]
-                tags = entry[5]
-                
-                # Normalizar los campos para búsqueda
-                title_lower = title.lower() if title else ""
-                title_upper = title.upper() if title else ""
-                title_no_accents = remove_accents(title) if title else ""
-                url_lower = url.lower()
-                url_upper = url.upper()
-                url_no_accents = remove_accents(url)
-                
-                # Verificar si el término de búsqueda está en el título o URL
-                if (search_term in title_lower or
-                    search_term_upper in title_upper or
-                    search_term in title_no_accents or
-                    search_term in url_lower or
-                    search_term_upper in url_upper or
-                    search_term in url_no_accents):
-                    # Convertir tags a lista
-                    tags_list = tags.split(',') if tags else []
-                    results.append((url_id, url, title, platform, timestamp, tags_list))
-            
-            if not results:
-                print(f"No se encontraron resultados para '{search}'")
-                return
-                
-            entries = results
-        else:
-            # Convertir tags a lista para todas las entradas
-            entries = [(entry[0], entry[1], entry[2], entry[3], entry[4], entry[5].split(',') if entry[5] else [])
-                      for entry in all_entries]
-            
-            # Si se especificó --no-tags, filtramos las entradas sin tags
-            if no_tags:
-                entries = [(url_id, url, title, platform, timestamp, tags_list)
-                         for url_id, url, title, platform, timestamp, tags_list in entries
-                         if not tags_list]
+        
+        # Convertir tags a lista para todas las entradas
+        entries = [(entry[0], entry[1], entry[2], entry[3], entry[4], entry[5].split(',') if entry[5] else [])
+                  for entry in all_entries]
+        
+        # Si se especificó --no-tags, filtramos las entradas sin tags
+        if no_tags:
+            entries = [(url_id, url, title, platform, timestamp, tags_list)
+                     for url_id, url, title, platform, timestamp, tags_list in entries
+                     if not tags_list]
             
         # Si hay tags, filtramos por tags
         if tags:
@@ -440,17 +414,16 @@ def playall(args) -> None:
             WHERE 1=1
         '''
         
-        # Añadir filtros
         params = []
         if args.search:
-            search_term = f"%{args.search}%"
-            query += " AND (sh.title LIKE ? OR sh.url LIKE ?)"
+            query += " AND (remove_accents(sh.title) LIKE ? OR remove_accents(sh.url) LIKE ?)"    
+            search_term = f"%{remove_accents(args.search)}%"
             params.extend([search_term, search_term])
         
         if args.tags:
             tag_ids = []
             for tag in args.tags:
-                cursor.execute('SELECT id FROM tags WHERE name = ?', (tag,))
+                cursor.execute('SELECT id FROM tags WHERE remove_accents(name) = ?', (remove_accents(tag),))
                 tag_id = cursor.fetchone()
                 if tag_id:
                     tag_ids.append(tag_id[0])
