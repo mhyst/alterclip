@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "alterclip"
-version = "0.2.6"
+version = "0.2.7"
 description = "Herramienta para interceptar URLs desde el portapapeles y modificarlas o reproducirlas"
 authors = [{ name="Julio Serrano", email="mhysterio@gmail.com" }]
 readme = "README.md"
