@@ -588,6 +588,7 @@ alterclip-cli - Interfaz de línea de comandos para alterclip
         Opciones de filtrado:
             --search     Filtro de búsqueda en el título o URL
             --tags       Filtro de búsqueda por tags
+            --no-tags    Muestra solo las URLs sin tags asociados
 
         Opciones de visualización:
             --limit N    Número de entradas a mostrar (por defecto: 10)
@@ -671,6 +672,9 @@ alterclip-cli - Interfaz de línea de comandos para alterclip
     print(colored("""
     # Ver el historial completo
     alterclip-cli hist --no-limit
+
+    # Ver solo las URLs sin tags
+    alterclip-cli hist --no-tags
 
     # Ver solo las últimas 5 entradas
     alterclip-cli hist --limit 5
