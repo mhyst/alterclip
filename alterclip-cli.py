@@ -132,7 +132,7 @@ def format_history_entry(entry: Tuple[int, str, str, str, str, List[str]]) -> st
 {colored('Tags:', 'yellow')} {tags_str}
 {colored('─' * 80, 'white', attrs=['dark'])}"""
 
-def get_streaming_history(limit: int = 10, no_limit: bool = False, search: str = None, tags: List[str] = None, no_tags: bool = False, platform: str = None, since: str = None) -> Tuple[str, list]:
+def get_streaming_history(limit: int = 10, no_limit: bool = False, search: str = None, tags: List[str] = None, no_tags: bool = False, platform: str = None, since: str = None, visto: int = None) -> Tuple[str, list]:
     """Obtiene el historial de URLs de streaming con sus tags asociados
     Si no_limit es True, muestra todo el historial
     Si no_limit es False y limit es None, muestra 10 entradas por defecto
@@ -148,24 +148,72 @@ def get_streaming_history(limit: int = 10, no_limit: bool = False, search: str =
     try:
         cursor = conn.cursor()
         
-        # Primero obtenemos todas las URLs
-        # Build the WHERE clause based on search parameters
+        # Build the WHERE clause
         where_clause = "WHERE 1=1"
         params = []
         
+        # Add search filter
         if search:
-            where_clause += " AND (sh.title LIKE ? OR sh.url LIKE ?)"
+            where_clause += " AND (remove_accents(sh.title) LIKE ? OR remove_accents(sh.url) LIKE ?)"
             search_param = f"%{remove_accents(search)}%"
             params.extend([search_param, search_param])
+            
+        # Add visto filter
+        if visto is not None:
+            where_clause += " AND sh.visto = ?"
+            params.append(visto)
+            
+        # Add tags filter
+        if tags:
+            tag_ids = []
+            for tag in tags:
+                tag_id = get_tag_id(tag)
+                if tag_id:
+                    tag_ids.append(tag_id)
+                    
+                    # Get IDs of child tags
+                    cursor.execute('''
+                        WITH RECURSIVE descendant_tags(id) AS (
+                            SELECT child_id FROM tag_hierarchy WHERE parent_id = ?
+                            UNION ALL
+                            SELECT th.child_id FROM tag_hierarchy th
+                            JOIN descendant_tags dt ON th.parent_id = dt.id
+                        )
+                        SELECT id FROM descendant_tags
+                    ''', (tag_id,))
+                    child_ids = cursor.fetchall()
+                    tag_ids.extend([child[0] for child in child_ids])
+                    
+                    # Get IDs of parent tags
+                    cursor.execute('''
+                        WITH RECURSIVE parent_tags(id) AS (
+                            SELECT parent_id FROM tag_hierarchy WHERE child_id = ?
+                            UNION ALL
+                            SELECT th.parent_id FROM tag_hierarchy th
+                            JOIN parent_tags pt ON th.child_id = pt.id
+                        )
+                        SELECT id FROM parent_tags
+                    ''', (tag_id,))
+                    parent_ids = cursor.fetchall()
+                    tag_ids.extend([parent[0] for parent in parent_ids])
+            
+            if tag_ids:
+                tag_ids_str = ','.join(map(str, tag_ids))
+                where_clause += f" AND sh.id IN (SELECT DISTINCT url_id FROM url_tags WHERE tag_id IN ({tag_ids_str}))"
+                
+        # Add no_tags filter
+        if no_tags:
+            where_clause += " AND sh.id NOT IN (SELECT DISTINCT url_id FROM url_tags)"
             
         # Handle limit parameter
         if limit is None:
             limit_clause = ""
         else:
-            limit_clause = f"LIMIT {limit}"
+            limit_clause = "LIMIT ?"
             params.append(limit)
         
-        cursor.execute(f'''
+        # Build the final query with all filters combined
+        query = f'''
             SELECT 
                 sh.id, 
                 sh.url, 
@@ -180,81 +228,17 @@ def get_streaming_history(limit: int = 10, no_limit: bool = False, search: str =
             GROUP BY sh.id, sh.url, sh.title, sh.platform, sh.timestamp
             ORDER BY sh.timestamp DESC
             {limit_clause}
-        ''', params)
+        '''
         
-        all_entries = cursor.fetchall()
+        cursor.execute(query, params)
+        entries = cursor.fetchall()
         
-        if not all_entries:
+        if not entries:
             return "No se encontraron coincidencias con la búsqueda", None
-        
+            
         # Convertir tags a lista para todas las entradas
         entries = [(entry[0], entry[1], entry[2], entry[3], entry[4], entry[5].split(',') if entry[5] else [])
-                  for entry in all_entries]
-        
-        # Si se especificó --no-tags, filtramos las entradas sin tags
-        if no_tags:
-            entries = [(url_id, url, title, platform, timestamp, tags_list)
-                     for url_id, url, title, platform, timestamp, tags_list in entries
-                     if not tags_list]
-            
-        # Si hay tags, filtramos por tags
-        if tags:
-            tag_ids = []
-            for tag in tags:
-                tag_id = get_tag_id(tag)
-                if tag_id:
-                    tag_ids.append(tag_id)
-                    
-                    # Obtener IDs de los tags hijos y descendientes
-                    cursor.execute('''
-                        WITH RECURSIVE descendant_tags(id) AS (
-                            SELECT child_id FROM tag_hierarchy WHERE parent_id = ?
-                            UNION ALL
-                            SELECT th.child_id FROM tag_hierarchy th
-                            JOIN descendant_tags dt ON th.parent_id = dt.id
-                        )
-                        SELECT id FROM descendant_tags
-                    ''', (tag_id,))
-                    child_ids = cursor.fetchall()
-                    tag_ids.extend([child[0] for child in child_ids])
-                    
-                    # Obtener IDs de los tags padres
-                    cursor.execute('''
-                        WITH RECURSIVE parent_tags(id) AS (
-                            SELECT parent_id FROM tag_hierarchy WHERE child_id = ?
-                            UNION ALL
-                            SELECT th.parent_id FROM tag_hierarchy th
-                            JOIN parent_tags pt ON th.child_id = pt.id
-                        )
-                        SELECT id FROM parent_tags
-                    ''', (tag_id,))
-                    parent_ids = cursor.fetchall()
-                    tag_ids.extend([parent[0] for parent in parent_ids])
-            
-            if tag_ids:
-                # Convertir la lista de IDs a una cadena SQL
-                tag_ids_str = ','.join(map(str, tag_ids))
-                
-                # Filtrar las entradas que tienen al menos uno de los tags
-                cursor.execute('''
-                    SELECT DISTINCT sh.id, sh.url, sh.title, sh.platform, sh.timestamp,
-                    GROUP_CONCAT(t.name) as tags
-                    FROM streaming_history sh
-                    LEFT JOIN url_tags ut ON sh.id = ut.url_id
-                    LEFT JOIN tags t ON ut.tag_id = t.id
-                    WHERE sh.id IN (
-                        SELECT DISTINCT url_id FROM url_tags WHERE tag_id IN ({})
-                    )
-                    GROUP BY sh.id, sh.url, sh.title, sh.platform, sh.timestamp
-                    ORDER BY sh.timestamp DESC
-                '''.format(tag_ids_str))
-                
-                filtered_entries = cursor.fetchall()
-                if filtered_entries:
-                    entries = [(entry[0], entry[1], entry[2], entry[3], entry[4], entry[5].split(',') if entry[5] else [])
-                             for entry in filtered_entries]
-                else:
-                    return f"No se encontraron entradas con los tags especificados: {', '.join(tags)}", None
+                  for entry in entries]
         
         # Si no hay límite, devolver todas las entradas
         if no_limit:
@@ -282,14 +266,12 @@ def get_streaming_history(limit: int = 10, no_limit: bool = False, search: str =
             
         # Aplicar el límite
         return None, entries[:limit]
-        
-        return None, entries
     except sqlite3.Error as e:
         return f"Error en la base de datos: {e}", None
     except Exception as e:
         return f"Error inesperado: {e}", None
 
-def show_streaming_history(limit: int = 10, no_limit: bool = False, search: str = None, tags: List[str] = None, no_tags: bool = False) -> None:
+def show_streaming_history(limit: int = 10, no_limit: bool = False, search: str = None, tags: List[str] = None, no_tags: bool = False, visto: int = None) -> None:
     """Muestra el historial de streaming con formato mejorado
     
     Args:
@@ -299,7 +281,7 @@ def show_streaming_history(limit: int = 10, no_limit: bool = False, search: str 
         tags: Lista de tags para filtrar
         no_tags: Si es True, muestra solo las entradas sin tags
     """
-    error_code, entries = get_streaming_history(limit, no_limit, search, tags, no_tags)
+    error_code, entries = get_streaming_history(limit, no_limit, search, tags, no_tags, visto=visto)
     
     if error_code:
         print_error(error_code)
@@ -1049,6 +1031,8 @@ def main() -> None:
     
     parser_search = subparsers.add_parser('search', help='Busca URLs en el historial')
     parser_search.add_argument('term', help='Término de búsqueda')
+    parser_search.add_argument('--visto', type=int, help='Filtrar por número máximo de reproducciones (ej: 0 para no vistos)')
+    parser_search.set_defaults(command='search')
     
     parser_toggle = subparsers.add_parser('toggle', help='Alterna entre modo normal y modo alterclip')
     
@@ -1058,6 +1042,8 @@ def main() -> None:
     parser_hist.add_argument('--search', help='Filtro de búsqueda en el título o URL')
     parser_hist.add_argument('--tags', nargs='*', help='Filtro de búsqueda por tags')
     parser_hist.add_argument('--no-tags', action='store_true', help='Muestra solo las URLs sin tags')
+    parser_hist.add_argument('--visto', type=int, help='Filtrar por número máximo de reproducciones (ej: 0 para no vistos)')
+    parser_hist.set_defaults(command='hist')
 
     # Comando playall
     parser_playall = subparsers.add_parser('playall', help='Reproduce múltiples URLs en secuencia')
@@ -1127,7 +1113,7 @@ def main() -> None:
         elif args.command == 'rm':
             remove_streaming_url(args.id)
         elif args.command == 'search':
-            show_streaming_history(search=args.term)
+            show_streaming_history(search=args.term, visto=args.visto)
         elif args.command == 'toggle':
             toggle_mode()
         elif args.command == 'hist':
@@ -1136,7 +1122,8 @@ def main() -> None:
                 no_limit=args.no_limit,
                 search=args.search,
                 tags=args.tags,
-                no_tags=args.no_tags
+                no_tags=args.no_tags,
+                visto=args.visto
             )
         elif args.command == 'playall':
             playall(args)
