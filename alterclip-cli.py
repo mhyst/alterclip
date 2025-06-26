@@ -149,7 +149,23 @@ def get_streaming_history(limit: int = 10, no_limit: bool = False, search: str =
         cursor = conn.cursor()
         
         # Primero obtenemos todas las URLs
-        cursor.execute('''
+        # Build the WHERE clause based on search parameters
+        where_clause = "WHERE 1=1"
+        params = []
+        
+        if search:
+            where_clause += " AND (sh.title LIKE ? OR sh.url LIKE ?)"
+            search_param = f"%{remove_accents(search)}%"
+            params.extend([search_param, search_param])
+            
+        # Handle limit parameter
+        if limit is None:
+            limit_clause = ""
+        else:
+            limit_clause = f"LIMIT {limit}"
+            params.append(limit)
+        
+        cursor.execute(f'''
             SELECT 
                 sh.id, 
                 sh.url, 
@@ -160,11 +176,11 @@ def get_streaming_history(limit: int = 10, no_limit: bool = False, search: str =
             FROM streaming_history sh
             LEFT JOIN url_tags ut ON sh.id = ut.url_id
             LEFT JOIN tags t ON ut.tag_id = t.id
-            WHERE 1=1
+            {where_clause}
             GROUP BY sh.id, sh.url, sh.title, sh.platform, sh.timestamp
             ORDER BY sh.timestamp DESC
-            LIMIT ?
-        ''', (f"%{remove_accents(search)}%", f"%{remove_accents(search)}%"))
+            {limit_clause}
+        ''', params)
         
         all_entries = cursor.fetchall()
         
@@ -293,6 +309,11 @@ def show_streaming_history(limit: int = 10, no_limit: bool = False, search: str 
         print_error("No se encontraron entradas")
         return
     
+    # Mostrar cabecera con el número total de entradas
+    total_entries = len(entries)
+    print(f"\n{colored('Total entradas encontradas:', 'yellow')} {total_entries}")
+    print_separator(char='=', style='double')
+    
     # Mostrar las entradas
     for entry in entries:
         print(format_history_entry(entry))
@@ -380,12 +401,33 @@ def reproduce_with_visto(url_id: int, url: str) -> None:
         conn.commit()
         
         print(f"\nReproduciendo: {url}")
-        proceso = subprocess.Popen(
-            [REPRODUCTOR_VIDEO] + shlex.split(url),
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL
-        )
-        proceso.wait()  # Esperar a que termine la reproducción
+        
+        # Verificar si mpv está instalado
+        try:
+            subprocess.run(['which', REPRODUCTOR_VIDEO], check=True)
+        except subprocess.CalledProcessError:
+            print(f"Error: {REPRODUCTOR_VIDEO} no está instalado. Instálalo con: sudo apt install {REPRODUCTOR_VIDEO}")
+            return
+            
+        # Intentar reproducir con mpv
+        try:
+            # Usar subprocess.run en lugar de Popen para mejor control
+            # y capturar cualquier error de salida
+            resultado = subprocess.run(
+                [REPRODUCTOR_VIDEO, url],
+                capture_output=True,
+                text=True
+            )
+            
+            # Mostrar errores si los hay
+            if resultado.returncode != 0:
+                print(f"Error al reproducir con {REPRODUCTOR_VIDEO}:")
+                print(f"Salida de error: {resultado.stderr}")
+                print(f"Código de salida: {resultado.returncode}")
+                
+        except Exception as e:
+            print(f"Error al ejecutar {REPRODUCTOR_VIDEO}: {e}")
+            
     except Exception as e:
         print(f"Error al reproducir URL: {e}", file=sys.stderr)
 
