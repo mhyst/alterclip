@@ -80,8 +80,14 @@ Ejemplos de uso:
 # Ver solo las últimas 5 entradas
 ./alterclip-cli hist --limit 5
 
+# Ver solo contenido de YouTube
+./alterclip-cli hist --platform YouTube
+
 # Buscar vídeos en el historial que contengan "música"
 ./alterclip-cli search música
+
+# Buscar vídeos de Instagram
+./alterclip-cli search música --platform Instagram
 
 # Reproducir el último vídeo guardado
 ./alterclip-cli play -1

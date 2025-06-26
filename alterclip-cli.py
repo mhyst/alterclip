@@ -205,9 +205,14 @@ def get_streaming_history(limit: int = 10, no_limit: bool = False, search: str =
         if no_tags:
             where_clause += " AND sh.id NOT IN (SELECT DISTINCT url_id FROM url_tags)"
             
+        # Add platform filter
+        if platform:
+            where_clause += " AND remove_accents(sh.platform) = ?"
+            params.append(remove_accents(platform))
+            
         # Handle limit parameter
         if limit is None:
-            limit_clause = ""
+            limit_clause = "LIMIT 10"
         else:
             limit_clause = "LIMIT ?"
             params.append(limit)
@@ -271,7 +276,7 @@ def get_streaming_history(limit: int = 10, no_limit: bool = False, search: str =
     except Exception as e:
         return f"Error inesperado: {e}", None
 
-def show_streaming_history(limit: int = 10, no_limit: bool = False, search: str = None, tags: List[str] = None, no_tags: bool = False, visto: int = None) -> None:
+def show_streaming_history(limit: int = 10, no_limit: bool = False, search: str = None, tags: List[str] = None, no_tags: bool = False, visto: int = None, platform: str = None) -> None:
     """Muestra el historial de streaming con formato mejorado
     
     Args:
@@ -280,8 +285,9 @@ def show_streaming_history(limit: int = 10, no_limit: bool = False, search: str 
         search: Cadena de búsqueda para filtrar por título o URL
         tags: Lista de tags para filtrar
         no_tags: Si es True, muestra solo las entradas sin tags
+        platform: Filtra por plataforma (YouTube, Instagram, etc.)
     """
-    error_code, entries = get_streaming_history(limit, no_limit, search, tags, no_tags, visto=visto)
+    error_code, entries = get_streaming_history(limit, no_limit, search, tags, no_tags, visto=visto, platform=platform)
     
     if error_code:
         print_error(error_code)
@@ -623,13 +629,14 @@ alterclip-cli - Interfaz de línea de comandos para alterclip
     print(colored("\nComandos disponibles:", 'yellow', attrs=['bold']))
     print_separator(style='double')
     print(colored("""
-    hist [--limit N] [--no-limit] [--search [TÉRMINO]] [--tags [TAGS]]
+    hist [--limit N] [--no-limit] [--search [TÉRMINO]] [--tags [TAGS]] [--platform [PLATAFORMA]]
         Muestra el historial de URLs de streaming reproducidas
 
         Opciones de filtrado:
             --search     Filtro de búsqueda en el título o URL
             --tags       Filtro de búsqueda por tags
             --no-tags    Muestra solo las URLs sin tags asociados
+            --platform   Filtra por plataforma (YouTube, Instagram, etc.)
 
         Opciones de visualización:
             --limit N    Número de entradas a mostrar (por defecto: 10)
@@ -662,9 +669,10 @@ alterclip-cli - Interfaz de línea de comandos para alterclip
 """, 'white'))
     
     print(colored("""
-    search [TÉRMINO]
+    search [TÉRMINO] [--platform [PLATAFORMA]]
         Busca URLs en el historial por título
         TÉRMINO: Término de búsqueda
+        --platform: Filtra por plataforma (YouTube, Instagram, etc.)
 """, 'white'))
     
     print(colored("""
@@ -1035,6 +1043,7 @@ def main() -> None:
     parser_search = subparsers.add_parser('search', help='Busca URLs en el historial')
     parser_search.add_argument('term', help='Término de búsqueda')
     parser_search.add_argument('--visto', type=int, help='Filtrar por número máximo de reproducciones (ej: 0 para no vistos)')
+    parser_search.add_argument('--platform', help='Filtrar por plataforma (YouTube, Instagram, etc.)')
     parser_search.set_defaults(command='search')
     
     parser_toggle = subparsers.add_parser('toggle', help='Alterna entre modo normal y modo alterclip')
@@ -1046,6 +1055,7 @@ def main() -> None:
     parser_hist.add_argument('--tags', nargs='*', help='Filtro de búsqueda por tags')
     parser_hist.add_argument('--no-tags', action='store_true', help='Muestra solo las URLs sin tags')
     parser_hist.add_argument('--visto', type=int, help='Filtrar por número máximo de reproducciones (ej: 0 para no vistos)')
+    parser_hist.add_argument('--platform', help='Filtrar por plataforma (YouTube, Instagram, etc.)')
     parser_hist.set_defaults(command='hist')
 
     # Comando playall
@@ -1117,7 +1127,7 @@ def main() -> None:
         elif args.command == 'rm':
             remove_streaming_url(args.id)
         elif args.command == 'search':
-            show_streaming_history(search=args.term, visto=args.visto)
+            show_streaming_history(search=args.term, visto=args.visto, platform=args.platform)
         elif args.command == 'toggle':
             toggle_mode()
         elif args.command == 'hist':
@@ -1127,7 +1137,8 @@ def main() -> None:
                 search=args.search,
                 tags=args.tags,
                 no_tags=args.no_tags,
-                visto=args.visto
+                visto=args.visto,
+                platform=args.platform
             )
         elif args.command == 'playall':
             playall(args)
