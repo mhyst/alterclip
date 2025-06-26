@@ -523,7 +523,8 @@ def playall(args) -> None:
             tags=args.tags,
             no_tags=False,  # No aplicar filtro de no_tags en playall
             platform=args.platform,
-            since=args.since
+            since=args.since,
+            visto=args.visto
         )
         
         if error_code:
@@ -1048,6 +1049,7 @@ def main() -> None:
     # Comando playall
     parser_playall = subparsers.add_parser('playall', help='Reproduce múltiples URLs en secuencia')
     parser_playall.add_argument('--limit', type=int, help='Número máximo de URLs a reproducir')
+    parser_playall.add_argument('--visto', type=int, help='Filtrar por número máximo de reproducciones (ej: 0 para no vistos)')
     parser_playall.add_argument('--search', help='Filtro de búsqueda en el título o URL')
     parser_playall.add_argument('--tags', nargs='*', help='Filtro de búsqueda por tags')
     parser_playall.add_argument('--reverse', action='store_true', help='Reproducir en orden inverso')
