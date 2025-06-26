@@ -90,6 +90,8 @@ Ejemplos de uso:
 ./alterclip-cli playall --tags "Filosofía" --shuffle
 ./alterclip-cli playall --search "música" --limit 5
 ./alterclip-cli playall --platform "YouTube" --reverse
+./alterclip-cli playall --visto 0  # Reproduce solo URLs no vistas
+./alterclip-cli playall --visto 3   # Reproduce URLs vistas 3 veces o menos
 
 # Copiar la URL del penúltimo vídeo al portapapeles
 ./alterclip-cli copy -2
