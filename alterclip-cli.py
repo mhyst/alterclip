@@ -45,7 +45,21 @@ def get_db_path() -> Path:
 def create_connection() -> sqlite3.Connection:
     """Crea una conexión a la base de datos"""
     conn = sqlite3.connect(get_db_path())
+
+    #Añadimos la función remove_accents para que pueda ser usada en las consultas
     conn.create_function("remove_accents", 1, remove_accents)
+
+    #Vamos a realizar migración para añadir la nueva columna "visto" a streaming_history
+    cursor = conn.cursor()
+
+    # Comprobar si ya existe la columna 'visto'
+    cursor.execute("PRAGMA table_info(streaming_history);")
+    columnas = [fila[1] for fila in cursor.fetchall()]
+
+    if 'visto' not in columnas:
+        cursor.execute("ALTER TABLE streaming_history ADD COLUMN visto INTEGER DEFAULT 0;")
+
+    conn.commit()
     return conn
 
 def get_db_connection() -> sqlite3.Connection:
@@ -118,14 +132,19 @@ def format_history_entry(entry: Tuple[int, str, str, str, str, List[str]]) -> st
 {colored('Tags:', 'yellow')} {tags_str}
 {colored('─' * 80, 'white', attrs=['dark'])}"""
 
-def get_streaming_history(limit: int = 10, no_limit: bool = False, search: str = None, tags: List[str] = None, no_tags: bool = False) -> None:
+def get_streaming_history(limit: int = 10, no_limit: bool = False, search: str = None, tags: List[str] = None, no_tags: bool = False, platform: str = None, since: str = None) -> Tuple[str, list]:
     """Obtiene el historial de URLs de streaming con sus tags asociados
     Si no_limit es True, muestra todo el historial
     Si no_limit es False y limit es None, muestra 10 entradas por defecto
     Si search no es None, muestra solo las entradas que contengan la cadena de búsqueda en el título o URL
     Si tags no es None, muestra solo las entradas que tengan al menos uno de los tags especificados
     Si --no-tags está especificado, muestra solo las URLs sin tags asociados
-    También muestra URLs relacionadas con tags hijos y padres de los especificados"""
+    También muestra URLs relacionadas con tags hijos y padres de los especificados
+    
+    Devuelve una tupla (error_code, entries) donde:
+    - error_code: None si no hay error, o una cadena con el mensaje de error
+    - entries: lista de entradas si no hay error, o None si hay error
+    """
     try:
         cursor = conn.cursor()
         
@@ -141,16 +160,16 @@ def get_streaming_history(limit: int = 10, no_limit: bool = False, search: str =
             FROM streaming_history sh
             LEFT JOIN url_tags ut ON sh.id = ut.url_id
             LEFT JOIN tags t ON ut.tag_id = t.id
-            WHERE remove_accents(sh.title) LIKE ? OR remove_accents(sh.url) LIKE ?
+            WHERE 1=1
             GROUP BY sh.id, sh.url, sh.title, sh.platform, sh.timestamp
             ORDER BY sh.timestamp DESC
+            LIMIT ?
         ''', (f"%{remove_accents(search)}%", f"%{remove_accents(search)}%"))
         
         all_entries = cursor.fetchall()
         
         if not all_entries:
-            print("No hay coincidencias con tu búsqueda")
-            return
+            return "No se encontraron coincidencias con la búsqueda", None
         
         # Convertir tags a lista para todas las entradas
         entries = [(entry[0], entry[1], entry[2], entry[3], entry[4], entry[5].split(',') if entry[5] else [])
@@ -198,34 +217,86 @@ def get_streaming_history(limit: int = 10, no_limit: bool = False, search: str =
             
             if tag_ids:
                 # Convertir la lista de IDs a una cadena SQL
-                tag_ids_str = ','.join('?' for _ in tag_ids)
-                cursor.execute(f'''
-                    SELECT DISTINCT sh.id
+                tag_ids_str = ','.join(map(str, tag_ids))
+                
+                # Filtrar las entradas que tienen al menos uno de los tags
+                cursor.execute('''
+                    SELECT DISTINCT sh.id, sh.url, sh.title, sh.platform, sh.timestamp,
+                    GROUP_CONCAT(t.name) as tags
                     FROM streaming_history sh
-                    JOIN url_tags ut ON sh.id = ut.url_id
-                    WHERE ut.tag_id IN ({tag_ids_str})
-                ''', tag_ids)
+                    LEFT JOIN url_tags ut ON sh.id = ut.url_id
+                    LEFT JOIN tags t ON ut.tag_id = t.id
+                    WHERE sh.id IN (
+                        SELECT DISTINCT url_id FROM url_tags WHERE tag_id IN ({})
+                    )
+                    GROUP BY sh.id, sh.url, sh.title, sh.platform, sh.timestamp
+                    ORDER BY sh.timestamp DESC
+                '''.format(tag_ids_str))
                 
-                tag_entries = cursor.fetchall()
-                tag_entry_ids = {row[0] for row in tag_entries}
-                
-                entries = [entry for entry in entries if entry[0] in tag_entry_ids]
-                
-                if not entries:
-                    print(f"No se encontraron resultados con los tags especificados")
-                    return
+                filtered_entries = cursor.fetchall()
+                if filtered_entries:
+                    entries = [(entry[0], entry[1], entry[2], entry[3], entry[4], entry[5].split(',') if entry[5] else [])
+                             for entry in filtered_entries]
+                else:
+                    return f"No se encontraron entradas con los tags especificados: {', '.join(tags)}", None
         
-        # Limitar el número de resultados si no se ha pedido todo el historial
-        if not no_limit:
-            entries = entries[:limit if limit else 10]
+        # Si no hay límite, devolver todas las entradas
+        if no_limit:
+            limit = None
         
-        print(f"\nHistorial de URLs de streaming ({len(entries)} resultados):")
-        print_separator(style='double')
-        for entry in entries:
-            print(format_history_entry(entry))
+        # Si se especificó fecha mínima
+        if since:
+            try:
+                since_date = datetime.strptime(since, '%Y-%m-%d').strftime('%Y-%m-%d %H:%M:%S')
+                entries = [(url_id, url, title, platform, timestamp, tags_list)
+                         for url_id, url, title, platform, timestamp, tags_list in entries
+                         if timestamp >= since_date]
+            except ValueError:
+                return f"Formato de fecha inválido. Use YYYY-MM-DD", None
         
+        # Si se especificó plataforma
+        if platform:
+            entries = [(url_id, url, title, platform, timestamp, tags_list)
+                     for url_id, url, title, platform, timestamp, tags_list in entries
+                     if platform.lower() == platform.lower()]
+        
+        # Si no hay límite, devolver todas las entradas
+        if not limit:
+            return None, entries
+            
+        # Aplicar el límite
+        return None, entries[:limit]
+        
+        return None, entries
+    except sqlite3.Error as e:
+        return f"Error en la base de datos: {e}", None
     except Exception as e:
-        print(f"Error al obtener el historial: {e}")
+        return f"Error inesperado: {e}", None
+
+def show_streaming_history(limit: int = 10, no_limit: bool = False, search: str = None, tags: List[str] = None, no_tags: bool = False) -> None:
+    """Muestra el historial de streaming con formato mejorado
+    
+    Args:
+        limit: Número máximo de entradas a mostrar (10 por defecto)
+        no_limit: Si es True, muestra todas las entradas
+        search: Cadena de búsqueda para filtrar por título o URL
+        tags: Lista de tags para filtrar
+        no_tags: Si es True, muestra solo las entradas sin tags
+    """
+    error_code, entries = get_streaming_history(limit, no_limit, search, tags, no_tags)
+    
+    if error_code:
+        print_error(error_code)
+        return
+    
+    if not entries:
+        print_error("No se encontraron entradas")
+        return
+    
+    # Mostrar las entradas
+    for entry in entries:
+        print(format_history_entry(entry))
+        print()  # Línea en blanco entre entradas
 
 def add_tag(name: str, parent_name: str = None, description: str = None) -> int:
     """Añade un nuevo tag y devuelve su ID
@@ -294,7 +365,31 @@ def add_tag_to_url(url_id: int, tag_name: str):
         print(f"Error: La URL ya tiene el tag '{tag_name}'")
         return False
 
-def remove_tag_from_url(url_id: int, tag_name: str):
+def reproduce_with_visto(url_id: int, url: str) -> None:
+    """Reproduce una URL y actualiza el contador visto
+    
+    Args:
+        url_id: ID de la entrada en streaming_history
+        url: URL a reproducir
+    """
+    try:
+        cursor = conn.cursor()
+        
+        # Incrementar el contador visto
+        cursor.execute('UPDATE streaming_history SET visto = visto + 1 WHERE id = ?', (url_id,))
+        conn.commit()
+        
+        print(f"\nReproduciendo: {url}")
+        proceso = subprocess.Popen(
+            [REPRODUCTOR_VIDEO] + shlex.split(url),
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL
+        )
+        proceso.wait()  # Esperar a que termine la reproducción
+    except Exception as e:
+        print(f"Error al reproducir URL: {e}", file=sys.stderr)
+
+def remove_tag_from_url(url_id: int, tag_name: str) -> bool:
     """Elimina la asociación entre una URL y un tag específico"""
     try:
         cursor = conn.cursor()
@@ -351,13 +446,7 @@ def play_streaming_url(url_id: int) -> None:
             return
             
         url = result[0]
-        print(f"\nReproduciendo: {url}")
-        proceso = subprocess.Popen(
-            [REPRODUCTOR_VIDEO] + shlex.split(url),
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL
-        )
-        proceso.wait()  # Esperar a que termine la reproducción
+        reproduce_with_visto(url_id, url)
     except Exception as e:
         print(f"Error al reproducir URL: {e}", file=sys.stderr)
 
@@ -400,72 +489,31 @@ def copy_streaming_url(url_id: int) -> None:
 def playall(args) -> None:
     """Maneja la reproducción múltiple de URLs según los filtros especificados"""
     try:
-        # Obtener el historial filtrado
         print("Buscando URLs que coincidan con los criterios...")
         
-        # Primero obtenemos el historial sin imprimirlo
-        cursor = conn.cursor()
-        query = '''
-            SELECT sh.id, sh.url, sh.title, sh.platform, sh.timestamp,
-                   GROUP_CONCAT(DISTINCT t.name) as tags
-            FROM streaming_history sh
-            LEFT JOIN url_tags ut ON sh.id = ut.url_id
-            LEFT JOIN tags t ON ut.tag_id = t.id
-            WHERE 1=1
-        '''
+        # Obtener el historial filtrado usando get_streaming_history
+        error_code, history = get_streaming_history(
+            limit=args.limit,
+            no_limit=True,
+            search=args.search,
+            tags=args.tags,
+            no_tags=False,  # No aplicar filtro de no_tags en playall
+            platform=args.platform,
+            since=args.since
+        )
         
-        params = []
-        if args.search:
-            query += " AND (remove_accents(sh.title) LIKE ? OR remove_accents(sh.url) LIKE ?)"    
-            search_term = f"%{remove_accents(args.search)}%"
-            params.extend([search_term, search_term])
-        
-        if args.tags:
-            tag_ids = []
-            for tag in args.tags:
-                cursor.execute('SELECT id FROM tags WHERE remove_accents(name) = ?', (remove_accents(tag),))
-                tag_id = cursor.fetchone()
-                if tag_id:
-                    tag_ids.append(tag_id[0])
-                    
-                    # Obtener IDs de los tags hijos
-                    cursor.execute('''
-                        WITH RECURSIVE child_tags(id) AS (
-                            SELECT child_id FROM tag_hierarchy WHERE parent_id = ?
-                            UNION ALL
-                            SELECT th.child_id FROM tag_hierarchy th
-                            JOIN child_tags ct ON th.parent_id = ct.id
-                        )
-                        SELECT id FROM child_tags
-                    ''', (tag_id[0],))
-                    child_ids = cursor.fetchall()
-                    tag_ids.extend([child[0] for child in child_ids])
+        if error_code:
+            print(f"Error al obtener el historial: {error_code}", file=sys.stderr)
+            return
             
-            if tag_ids:
-                tag_ids_str = ','.join('?' for _ in tag_ids)
-                query += f' AND EXISTS (SELECT 1 FROM url_tags WHERE url_id = sh.id AND tag_id IN ({tag_ids_str}))'
-                params.extend(tag_ids)
-        
-        # Filtrar por plataforma si se especifica
-        if args.platform:
-            query += " AND sh.platform = ?"
-            params.append(args.platform)
-        
-        # Ordenar y limitar resultados
-        query += ' GROUP BY sh.id ORDER BY sh.timestamp DESC'
-        if args.limit is not None:
-            query += ' LIMIT ?'
-            params.append(args.limit)
-        
-        cursor.execute(query, params)
-        history = cursor.fetchall()
-        
         if not history:
             print("No se encontraron URLs que coincidan con los criterios de búsqueda", file=sys.stderr)
             print(f"Criterios de búsqueda:")
             print(f"- Límite: {args.limit if args.limit is None else 'sin límite'}")
             print(f"- Búsqueda: {args.search or 'ninguna'}")
             print(f"- Tags: {', '.join(args.tags) if args.tags else 'ninguno'}")
+            print(f"- Plataforma: {args.platform or 'cualquiera'}")
+            print(f"- Desde: {args.since or 'cualquier fecha'}")
             return
             
         print(f"\nEncontradas {len(history)} URLs que coinciden con los criterios")
@@ -486,12 +534,7 @@ def playall(args) -> None:
         for i, entry in enumerate(history, 1):
             url = entry[1]  # La URL está en el índice 1 de cada tupla
             print(f"\nReproduciendo video {i}/{len(history)}: {url}")
-            proceso = subprocess.Popen(
-                [REPRODUCTOR_VIDEO] + shlex.split(url),
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL
-            )
-            proceso.wait()  # Esperar a que termine cada video antes de reproducir el siguiente
+            reproduce_with_visto(entry[0], url)
     except Exception as e:
         print(f"Error en playall: {e}", file=sys.stderr)
 
@@ -1042,11 +1085,11 @@ def main() -> None:
         elif args.command == 'rm':
             remove_streaming_url(args.id)
         elif args.command == 'search':
-            get_streaming_history(search=args.term)
+            show_streaming_history(search=args.term)
         elif args.command == 'toggle':
             toggle_mode()
         elif args.command == 'hist':
-            get_streaming_history(
+            show_streaming_history(
                 limit=args.limit,
                 no_limit=args.no_limit,
                 search=args.search,
@@ -1079,6 +1122,9 @@ if __name__ == "__main__":
     try:
         conn = create_connection()
         main()
+    except Exception as e:
+        print_error(f"Error al iniciar el programa: {e}")
+        sys.exit(1)
     finally:
         if conn is not None:
             conn.close()
