@@ -183,6 +183,12 @@ def get_streaming_history(limit: int = 10, no_limit: bool = False, search: str =
             params.append(remove_accents(platform))
 
         if since:
+            try:
+                # Intenta convertir la fecha a formato YYYY-MM-DD
+                datetime.strptime(since, '%Y-%m-%d')
+            except ValueError:
+                return "Formato de fecha inválido. Use YYYY-MM-DD", None
+                
             where_clause += " AND sh.timestamp >= ?"
             params.append(since)
             
