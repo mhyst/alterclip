@@ -8,10 +8,8 @@ from pathlib import Path
 from platformdirs import user_log_dir
 import subprocess
 from typing import List, Tuple
-from unidecode import unidecode
 import argcomplete
 import os
-import shlex
 from termcolor import colored
 import unicodedata
 
@@ -23,7 +21,7 @@ conn = None
 def print_error(message: str, file=sys.stderr) -> None:
     """Muestra un mensaje de error con formato mejorado"""
     print(colored("Error:", 'red', attrs=['bold']), 
-          colored(message, 'red'), 
+          colored(message, 'yellow'), 
           file=file)
 
 def print_separator(char='─', length=80, style='thin') -> None:
@@ -78,32 +76,6 @@ def remove_accents(text):
         c for c in unicodedata.normalize('NFD', text)
         if unicodedata.category(c) != 'Mn'
     ).lower()
-
-# def remove_accents(input_str: str) -> str:
-#     """Elimina los acentos de una cadena de texto"""
-#     replacements = {
-#         'á': 'a', 'à': 'a', 'â': 'a', 'ä': 'a', 'ã': 'a', 'å': 'a',
-#         'é': 'e', 'è': 'e', 'ê': 'e', 'ë': 'e',
-#         'í': 'i', 'ì': 'i', 'î': 'i', 'ï': 'i',
-#         'ó': 'o', 'ò': 'o', 'ô': 'o', 'ö': 'o', 'õ': 'o', 'ø': 'o',
-#         'ú': 'u', 'ù': 'u', 'û': 'u', 'ü': 'u',
-#         'ñ': 'n', 'ç': 'c',
-#         'Á': 'A', 'À': 'A', 'Â': 'A', 'Ä': 'A', 'Ã': 'A', 'Å': 'A',
-#         'É': 'E', 'È': 'E', 'Ê': 'E', 'Ë': 'E',
-#         'Í': 'I', 'Ì': 'I', 'Î': 'I', 'Ï': 'I',
-#         'Ó': 'O', 'Ò': 'O', 'Ô': 'O', 'Ö': 'O', 'Õ': 'O', 'Ø': 'O',
-#         'Ú': 'U', 'Ù': 'U', 'Û': 'U', 'Ü': 'U',
-#         'Ñ': 'N', 'Ç': 'C'
-#     }
-    
-#     # Primero convertimos a minúsculas
-#     input_str = input_str.lower()
-    
-#     # Luego reemplazamos los caracteres
-#     for original, replacement in replacements.items():
-#         input_str = input_str.replace(original, replacement)
-    
-#     return input_str
 
 def format_history_entry(entry: Tuple[int, str, str, str, str, List[str]]) -> str:
     """Formatea una entrada del historial para mostrar en la salida"""
@@ -209,6 +181,10 @@ def get_streaming_history(limit: int = 10, no_limit: bool = False, search: str =
         if platform:
             where_clause += " AND remove_accents(sh.platform) = ?"
             params.append(remove_accents(platform))
+
+        if since:
+            where_clause += " AND sh.timestamp >= ?"
+            params.append(since)
             
         # Handle limit parameter
         if limit is None:
@@ -248,23 +224,7 @@ def get_streaming_history(limit: int = 10, no_limit: bool = False, search: str =
         # Si no hay límite, devolver todas las entradas
         if no_limit:
             limit = None
-        
-        # Si se especificó fecha mínima
-        if since:
-            try:
-                since_date = datetime.strptime(since, '%Y-%m-%d').strftime('%Y-%m-%d %H:%M:%S')
-                entries = [(url_id, url, title, platform, timestamp, tags_list)
-                         for url_id, url, title, platform, timestamp, tags_list in entries
-                         if timestamp >= since_date]
-            except ValueError:
-                return f"Formato de fecha inválido. Use YYYY-MM-DD", None
-        
-        # Si se especificó plataforma
-        if platform:
-            entries = [(url_id, url, title, platform, timestamp, tags_list)
-                     for url_id, url, title, platform, timestamp, tags_list in entries
-                     if platform.lower() == platform.lower()]
-        
+         
         # Si no hay límite, devolver todas las entradas
         if not limit:
             return None, entries
