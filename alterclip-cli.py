@@ -1011,6 +1011,7 @@ def main() -> None:
     parser_search.add_argument('term', help='Término de búsqueda')
     parser_search.add_argument('--visto', type=int, help='Filtrar por número máximo de reproducciones (ej: 0 para no vistos)')
     parser_search.add_argument('--platform', help='Filtrar por plataforma (YouTube, Instagram, etc.)')
+    parser_search.add_argument('--since', help='Filtrar por fecha mínima (formato YYYY-MM-DD)')
     parser_search.set_defaults(command='search')
     
     parser_toggle = subparsers.add_parser('toggle', help='Alterna entre modo normal y modo alterclip')
@@ -1023,6 +1024,7 @@ def main() -> None:
     parser_hist.add_argument('--no-tags', action='store_true', help='Muestra solo las URLs sin tags')
     parser_hist.add_argument('--visto', type=int, help='Filtrar por número máximo de reproducciones (ej: 0 para no vistos)')
     parser_hist.add_argument('--platform', help='Filtrar por plataforma (YouTube, Instagram, etc.)')
+    parser_hist.add_argument('--since', help='Filtrar por fecha mínima (formato YYYY-MM-DD)')
     parser_hist.set_defaults(command='hist')
 
     # Comando playall
@@ -1094,7 +1096,7 @@ def main() -> None:
         elif args.command == 'rm':
             remove_streaming_url(args.id)
         elif args.command == 'search':
-            show_streaming_history(search=args.term, visto=args.visto, platform=args.platform)
+            show_streaming_history(search=args.term, visto=args.visto, platform=args.platform, since=args.since)
         elif args.command == 'toggle':
             toggle_mode()
         elif args.command == 'hist':
@@ -1105,7 +1107,8 @@ def main() -> None:
                 tags=args.tags,
                 no_tags=args.no_tags,
                 visto=args.visto,
-                platform=args.platform
+                platform=args.platform,
+                since=args.since
             )
         elif args.command == 'playall':
             playall(args)
