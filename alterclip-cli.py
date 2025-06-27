@@ -188,8 +188,9 @@ def get_streaming_history(limit: int = 10, no_limit: bool = False, search: str =
                 datetime.strptime(since, '%Y-%m-%d')
             except ValueError:
                 return "Formato de fecha inválido. Use YYYY-MM-DD", None
-                
+
             where_clause += " AND sh.timestamp >= ?"
+            since = since + " 00:00:00"
             params.append(since)
             
         # Handle limit parameter
