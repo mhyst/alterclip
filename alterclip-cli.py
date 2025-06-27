@@ -356,7 +356,7 @@ def reproduce_with_visto(url_id: int, url: str) -> None:
         
         # Verificar si mpv está instalado
         try:
-            subprocess.run(['which', REPRODUCTOR_VIDEO], check=True)
+            subprocess.run(['which', REPRODUCTOR_VIDEO], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         except subprocess.CalledProcessError:
             print(f"Error: {REPRODUCTOR_VIDEO} no está instalado. Instálalo con: sudo apt install {REPRODUCTOR_VIDEO}")
             return
