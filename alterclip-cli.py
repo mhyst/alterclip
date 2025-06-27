@@ -12,6 +12,7 @@ import argcomplete
 import os
 from termcolor import colored
 import unicodedata
+from datetime import datetime
 
 
 REPRODUCTOR_VIDEO = "mpv"
@@ -194,7 +195,9 @@ def get_streaming_history(limit: int = 10, no_limit: bool = False, search: str =
             params.append(since)
             
         # Handle limit parameter
-        if limit is None:
+        if no_limit:
+            limit_clause = ""
+        elif limit is None:
             limit_clause = "LIMIT 10"
         else:
             limit_clause = "LIMIT ?"
@@ -227,23 +230,14 @@ def get_streaming_history(limit: int = 10, no_limit: bool = False, search: str =
         # Convertir tags a lista para todas las entradas
         entries = [(entry[0], entry[1], entry[2], entry[3], entry[4], entry[5].split(',') if entry[5] else [])
                   for entry in entries]
-        
-        # Si no hay límite, devolver todas las entradas
-        if no_limit:
-            limit = None
-         
-        # Si no hay límite, devolver todas las entradas
-        if not limit:
-            return None, entries
             
-        # Aplicar el límite
-        return None, entries[:limit]
+        return None, entries
     except sqlite3.Error as e:
         return f"Error en la base de datos: {e}", None
     except Exception as e:
         return f"Error inesperado: {e}", None
 
-def show_streaming_history(limit: int = 10, no_limit: bool = False, search: str = None, tags: List[str] = None, no_tags: bool = False, visto: int = None, platform: str = None) -> None:
+def show_streaming_history(limit: int = 10, no_limit: bool = False, search: str = None, tags: List[str] = None, no_tags: bool = False, visto: int = None, platform: str = None, since: str = None) -> None:
     """Muestra el historial de streaming con formato mejorado
     
     Args:
@@ -252,9 +246,11 @@ def show_streaming_history(limit: int = 10, no_limit: bool = False, search: str 
         search: Cadena de búsqueda para filtrar por título o URL
         tags: Lista de tags para filtrar
         no_tags: Si es True, muestra solo las entradas sin tags
+        visto: Filtra por número máximo de reproducciones (ej: 0 para no vistos)
         platform: Filtra por plataforma (YouTube, Instagram, etc.)
+        since: Filtra por fecha mínima (formato YYYY-MM-DD)
     """
-    error_code, entries = get_streaming_history(limit, no_limit, search, tags, no_tags, visto=visto, platform=platform)
+    error_code, entries = get_streaming_history(limit, no_limit, search, tags, no_tags, visto=visto, platform=platform, since=since)
     
     if error_code:
         print_error(error_code)
