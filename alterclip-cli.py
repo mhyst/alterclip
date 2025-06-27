@@ -113,6 +113,7 @@ def get_streaming_history(limit: int = 10, no_limit: bool = False, search: str =
     Si tags no es None, muestra solo las entradas que tengan al menos uno de los tags especificados
     Si --no-tags está especificado, muestra solo las URLs sin tags asociados
     También muestra URLs relacionadas con tags hijos y padres de los especificados
+    Si since no es None, muestra solo las entradas que tengan una fecha posterior a la especificada
     
     Devuelve una tupla (error_code, entries) donde:
     - error_code: None si no hay error, o una cadena con el mensaje de error
