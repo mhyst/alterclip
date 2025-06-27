@@ -419,21 +419,13 @@ def play_streaming_url(url_id: int) -> None:
         
         # Si el ID es negativo, lo convertimos a un ID absoluto
         if url_id < 0:
-            # Obtener el total de entradas
-            cursor.execute('SELECT COUNT(*) FROM streaming_history')
-            total_entries = cursor.fetchone()[0]
-            if total_entries == 0:
-                print("No hay entradas en el historial", file=sys.stderr)
-                return
-                
-            if abs(url_id) > total_entries:
-                print(f"Índice relativo {-url_id} fuera de rango", file=sys.stderr)
-                return
-                
-            url_id = total_entries + url_id + 1
-        
-        cursor.execute('SELECT url FROM streaming_history WHERE id = ?', (url_id,))
-        result = cursor.fetchone()
+            # Obtener la entrada que buscamos de forma relativa
+            cursor.execute('SELECT url FROM streaming_history ORDER BY id DESC LIMIT 1 OFFSET ABS(?)-1', (url_id,))
+            result = cursor.fetchone()
+        else:
+            #Obtenemos la entrada que buscamos de forma absoluta
+            cursor.execute('SELECT url FROM streaming_history WHERE id = ?', (url_id,))
+            result = cursor.fetchone()
         
         if not result:
             print(f"No se encontró URL con ID {url_id}", file=sys.stderr)
@@ -451,21 +443,13 @@ def copy_streaming_url(url_id: int) -> None:
         
         # Si el ID es negativo, lo convertimos a un ID absoluto
         if url_id < 0:
-            # Obtener el total de entradas
-            cursor.execute('SELECT COUNT(*) FROM streaming_history')
-            total_entries = cursor.fetchone()[0]
-            if total_entries == 0:
-                print("No hay entradas en el historial", file=sys.stderr)
-                return
-                
-            if abs(url_id) > total_entries:
-                print(f"Índice relativo {-url_id} fuera de rango", file=sys.stderr)
-                return
-                
-            url_id = total_entries + url_id + 1
-        
-        cursor.execute('SELECT url FROM streaming_history WHERE id = ?', (url_id,))
-        result = cursor.fetchone()
+            # Obtener la entrada que buscamos de forma relativa
+            cursor.execute('SELECT url FROM streaming_history ORDER BY id DESC LIMIT 1 OFFSET ABS(?)-1', (url_id,))
+            result = cursor.fetchone()
+        else:
+            #Obtenemos la entrada que buscamos de forma absoluta
+            cursor.execute('SELECT url FROM streaming_history WHERE id = ?', (url_id,))
+            result = cursor.fetchone()
         
         if not result:
             print(f"No se encontró URL con ID {url_id}", file=sys.stderr)
