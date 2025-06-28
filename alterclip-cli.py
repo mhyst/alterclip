@@ -13,9 +13,18 @@ import os
 from termcolor import colored
 import unicodedata
 from datetime import datetime
-
+import openai
+import json
 
 REPRODUCTOR_VIDEO = "mpv"
+
+# Cargar la API key de OpenAI desde variable de entorno
+OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+if not OPENAI_API_KEY:
+    print("Advertencia: No se encontró la variable de entorno OPENAI_API_KEY. "
+          "La funcionalidad de sugerencias de IA no estará disponible.", file=sys.stderr)
+
+openai.api_key = OPENAI_API_KEY
 
 conn = None
 
@@ -898,6 +907,132 @@ def get_tag_hierarchy(tag_name: str) -> str:
         print(f"Error al obtener jerarquía del tag: {e}", file=sys.stderr)
         return tag_name
 
+
+def get_hierarchy_json() -> dict:
+    """Obtiene la jerarquía completa de etiquetas como un diccionario JSON anidado
+    
+    Returns:
+        dict: Diccionario con la estructura jerárquica de etiquetas
+    """
+    cursor = conn.cursor()
+    
+    # Obtener todos los tags
+    cursor.execute('SELECT id, name FROM tags')
+    tags = cursor.fetchall()
+    
+    # Obtener todas las relaciones jerárquicas
+    cursor.execute('SELECT parent_id, child_id FROM tag_hierarchy')
+    relationships = cursor.fetchall()
+    
+    # Crear un diccionario para mapear IDs a nombres
+    id_to_name = {tag_id: name for tag_id, name in tags}
+    
+    # Inicializar el grafo de jerarquía
+    hierarchy = {}
+    children = {}
+    
+    # Primero identificamos todos los nodos raíz (sin padres)
+    all_children = set()
+    parent_to_children = {}
+    
+    # Construir el mapeo de padres a hijos
+    for parent_id, child_id in relationships:
+        if parent_id not in parent_to_children:
+            parent_to_children[parent_id] = []
+        parent_to_children[parent_id].append(child_id)
+        all_children.add(child_id)
+    
+    # Identificar nodos raíz (aquellos que no son hijos de nadie)
+    root_nodes = [tag_id for tag_id, _ in tags if tag_id not in all_children]
+    
+    # Función recursiva para construir la jerarquía
+    def build_hierarchy(node_id):
+        node_name = id_to_name.get(node_id, str(node_id))
+        if node_id not in parent_to_children:
+            return {}
+            
+        children = {}
+        for child_id in parent_to_children.get(node_id, []):
+            child_name = id_to_name.get(child_id, str(child_id))
+            children[child_name] = build_hierarchy(child_id)
+            
+        return children
+    
+    # Construir la jerarquía completa
+    result = {}
+    for root_id in root_nodes:
+        root_name = id_to_name.get(root_id, str(root_id))
+        result[root_name] = build_hierarchy(root_id)
+    
+    return result
+
+
+def show_hierarchy_json() -> None:
+    """Muestra por pantalla la jerarquía de etiquetas en formato JSON
+    
+    Muestra la estructura jerárquica completa de las etiquetas formateada
+    de manera legible con indentación.
+    """
+    try:
+        import json
+        hierarchy = get_hierarchy_json()
+        print(json.dumps(hierarchy, indent=2, ensure_ascii=False))
+    except Exception as e:
+        print(f"Error al mostrar la jerarquía: {e}", file=sys.stderr)
+
+def suggest_IA_tags(title: str):
+    hierarchy = get_hierarchy_json()
+    
+    prompt = f"""
+Taxonomía actual (jerarquía de etiquetas):
+{json.dumps(hierarchy, indent=2, ensure_ascii=False)}
+
+Nuevo título:
+"{title}"
+
+Devuelve un objeto JSON con una de estas dos opciones:
+
+1. Si el título encaja en una etiqueta existente, responde con:
+{{
+  "acción": "asignar",
+  "etiqueta": "Ruta/De/Etiquetas",
+  "motivo": "Breve explicación"
+}}
+
+2. Si el título necesita una nueva etiqueta, responde con:
+{{
+  "acción": "añadir",
+  "etiqueta": "Ruta/Nueva/Etiqueta",
+  "motivo": "Breve explicación"
+}}
+
+No expliques nada fuera del objeto JSON y asegúrate de que el campo "etiqueta" incluya toda la jerarquía (separada por "/").
+"""
+
+    if not OPENAI_API_KEY:
+        print("Error: No se ha configurado la variable de entorno OPENAI_API_KEY", file=sys.stderr)
+        return None
+        
+    try:
+        client = openai.OpenAI(api_key=OPENAI_API_KEY)
+        response = client.chat.completions.create(
+            model="gpt-4-turbo",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.3
+        )
+        content = response.choices[0].message.content
+        try:
+            suggestion = json.loads(content)
+            print(json.dumps(suggestion, indent=2, ensure_ascii=False))
+            return suggestion
+        except json.JSONDecodeError:
+            print("⚠️ La respuesta no fue JSON válido:")
+            print(content)
+            return None
+    except Exception as e:
+        print(f"Error al contactar con la API: {e}")
+        return None
+
 def get_available_tags() -> List[str]:
     """Obtiene la lista de tags disponibles en la base de datos"""
     try:
@@ -1037,27 +1172,34 @@ def main() -> None:
     list_parser = tag_subparsers.add_parser('list', help='Lista todos los tags')
 
     # Comando tag hierarchy
-    hierarchy_parser = tag_subparsers.add_parser('hierarchy', help='Muestra la jerarquía completa de tags')
+    hierarchy_parser = tag_subparsers.add_parser('hierarchy', help='Muestra la jerarquía de tags')
+    
+    # Comando tag json
+    json_parser = tag_subparsers.add_parser('json', help='Muestra la jerarquía de tags en formato JSON')
+
+    # Comando tag suggest
+    suggest_parser = tag_subparsers.add_parser('suggest', help='Sugiere tags para un título usando IA')
+    suggest_parser.add_argument('title', help='Título para el que se desean sugerencias de tags')
 
     # Comando tag update
     update_parser = tag_subparsers.add_parser('update', help='Actualiza un tag')
-    update_parser.add_argument('name', help='Nombre del tag a actualizar').completer = autocomplete_tags
-    update_parser.add_argument('--new-name', help='Nuevo nombre del tag')
-    update_parser.add_argument('--description', help='Nueva descripción del tag')
+    update_parser.add_argument('name', help='Nombre actual del tag').completer = autocomplete_tags
+    update_parser.add_argument('--new-name', help='Nuevo nombre para el tag')
+    update_parser.add_argument('--description', help='Nueva descripción para el tag')
 
-    # Comando tag url
-    url_parser = tag_subparsers.add_parser('url', help='Gestiona asociaciones entre URLs y tags')
-    url_subparsers = url_parser.add_subparsers(dest='url_command', help='Comandos de URL')
+    # Comandos para gestionar tags de URLs
+    url_parser = tag_subparsers.add_parser('url', help='Gestiona tags de URLs')
+    url_subparsers = url_parser.add_subparsers(dest='url_command', help='Comandos de tags de URLs')
 
-    # Subcomando tag url add
-    url_add_parser = url_subparsers.add_parser('add', help='Asocia un tag con una URL')
+    # Comando tag url add
+    url_add_parser = url_subparsers.add_parser('add', help='Añade un tag a una URL')
     url_add_parser.add_argument('url_id', type=int, help='ID de la URL')
-    url_add_parser.add_argument('tag_name', help='Nombre del tag a asociar').completer = autocomplete_tags
+    url_add_parser.add_argument('tag_name', help='Nombre del tag a añadir').completer = autocomplete_tags
 
-    # Subcomando tag url rm
-    url_rm_parser = url_subparsers.add_parser('rm', help='Elimina una asociación entre URL y tag')
+    # Comando tag url rm
+    url_rm_parser = url_subparsers.add_parser('rm', help='Elimina un tag de una URL')
     url_rm_parser.add_argument('url_id', type=int, help='ID de la URL')
-    url_rm_parser.add_argument('tag_name', help='Nombre del tag a eliminar de la URL').completer = autocomplete_tags
+    url_rm_parser.add_argument('tag_name', help='Nombre del tag a eliminar').completer = autocomplete_tags
     
     # Manejar el caso de no argumentos
     if len(sys.argv) == 1:
@@ -1102,6 +1244,10 @@ def main() -> None:
                 list_tags()
             elif args.tag_command == 'hierarchy':
                 show_tag_hierarchy()
+            elif args.tag_command == 'json':
+                show_hierarchy_json()
+            elif args.tag_command == 'suggest':
+                suggest_IA_tags(args.title)
             elif args.tag_command == 'update':
                 update_tag(args.name, args.new_name, args.description)
             elif args.tag_command == 'url':
