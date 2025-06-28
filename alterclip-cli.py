@@ -18,14 +18,6 @@ import json
 
 REPRODUCTOR_VIDEO = "mpv"
 
-# Cargar la API key de OpenAI desde variable de entorno
-OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
-if not OPENAI_API_KEY:
-    print("Advertencia: No se encontró la variable de entorno OPENAI_API_KEY. "
-          "La funcionalidad de sugerencias de IA no estará disponible.", file=sys.stderr)
-
-openai.api_key = OPENAI_API_KEY
-
 conn = None
 
 def print_error(message: str, file=sys.stderr) -> None:
@@ -1008,6 +1000,11 @@ Devuelve un objeto JSON con una de estas dos opciones:
 
 No expliques nada fuera del objeto JSON y asegúrate de que el campo "etiqueta" incluya toda la jerarquía (separada por "/").
 """
+    # Cargar la API key de OpenAI desde variable de entorno
+    OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+    if not OPENAI_API_KEY:
+        print("Advertencia: No se encontró la variable de entorno OPENAI_API_KEY. "
+            "La funcionalidad de sugerencias de IA no estará disponible.", file=sys.stderr)
 
     if not OPENAI_API_KEY:
         print("Error: No se ha configurado la variable de entorno OPENAI_API_KEY", file=sys.stderr)
