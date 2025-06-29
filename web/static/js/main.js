@@ -1,3 +1,43 @@
+// Función para marcar como visto y abrir el enlace
+function markAndOpen(linkElement, event) {
+    event.preventDefault();
+    event.stopPropagation();
+    
+    const urlId = linkElement.getAttribute('data-url-id');
+    const url = linkElement.getAttribute('href');
+    
+    if (!urlId || !url) return false;
+    
+    console.log('Procesando clic en enlace:', url);
+    
+    // Marcar como visto
+    fetch(`/api/mark_as_viewed/${urlId}`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === 'success') {
+            // Actualizar la interfaz
+            const row = linkElement.closest('tr');
+            if (row) {
+                row.classList.remove('table-warning');
+                const badge = row.querySelector('.badge.bg-warning');
+                if (badge) {
+                    badge.remove();
+                }
+            }
+        }
+    })
+    .catch(error => console.error('Error al marcar como visto:', error));
+    
+    // Abrir en una nueva pestaña
+    window.open(url, '_blank');
+    return false;
+}
+
 // Función para inicializar los tooltips
 document.addEventListener('DOMContentLoaded', function() {
     // Inicializar tooltips
@@ -31,24 +71,98 @@ document.addEventListener('DOMContentLoaded', function() {
         .catch(error => console.error('Error al marcar como visto:', error));
     }
 
-    // Manejar clics en los enlaces de los vídeos
-    document.addEventListener('click', function(e) {
-        const link = e.target.closest('a[data-url-id]');
-        if (link && !e.ctrlKey && !e.metaKey) {
-            e.preventDefault();
-            const urlId = link.getAttribute('data-url-id');
-            const url = link.getAttribute('href');
-            
-            // Marcar como visto
-            markAsViewed(urlId, link);
-            
-            // Abrir el enlace en una nueva pestaña después de un pequeño retraso
-            // para asegurar que la petición AJAX se envíe
-            setTimeout(() => {
-                window.open(url, '_blank');
-            }, 100);
+    // Función para manejar clics en enlaces de video
+    function handleVideoLinkClick(e) {
+        // Solo manejar clics con el botón izquierdo y sin teclas modificadoras
+        if (e.button !== 0 || e.ctrlKey || e.shiftKey || e.altKey || e.metaKey) {
+            return true; // Permitir el comportamiento por defecto
         }
+
+        const link = e.currentTarget;
+        if (!link) return true;
+        
+        e.preventDefault();
+        e.stopPropagation();
+        
+        const urlId = link.getAttribute('data-url-id');
+        const url = link.getAttribute('href');
+        
+        if (!urlId || !url) return true;
+        
+        console.log('Procesando clic en enlace:', url);
+        
+        // Marcar como visto
+        markAsViewed(urlId, link);
+        
+        // Abrir siempre en una nueva pestaña
+        const newWindow = window.open('', '_blank');
+        if (newWindow) {
+            newWindow.location.href = url;
+            newWindow.focus();
+        } else {
+            // Si falla abrir en nueva pestaña, abrir en la misma
+            window.location.href = url;
+        }
+        
+        return false;
+    }
+    
+    // Agregar manejador de eventos después de que el DOM esté completamente cargado
+    document.addEventListener('DOMContentLoaded', function() {
+        console.log('DOM completamente cargado, agregando manejador de eventos para enlaces de video');
+        
+        // Agregar manejador de eventos a los enlaces existentes
+        document.querySelectorAll('a[data-url-id]').forEach(link => {
+            link.addEventListener('click', handleVideoLinkClick);
+        });
+        
+        // Usar MutationObserver para manejar enlaces cargados dinámicamente
+        const observer = new MutationObserver(function(mutations) {
+            mutations.forEach(function(mutation) {
+                mutation.addedNodes.forEach(function(node) {
+                    if (node.nodeType === 1) { // Solo elementos
+                        const links = node.matches('a[data-url-id]') ? [node] : 
+                                     node.querySelectorAll ? node.querySelectorAll('a[data-url-id]') : [];
+                        
+                        links.forEach(link => {
+                            link.removeEventListener('click', handleVideoLinkClick);
+                            link.addEventListener('click', handleVideoLinkClick);
+                        });
+                    }
+                });
+            });
+        });
+        
+        // Comenzar a observar el documento con los parámetros configurados
+        observer.observe(document.body, {
+            childList: true,
+            subtree: true
+        });
     });
+    
+    // Función para verificar si una URL es de YouTube
+    function isYoutubeUrl(url) {
+        return url.includes('youtube.com') || url.includes('youtu.be');
+    }
+    
+    // Función para extraer el ID de un video de YouTube
+    function getYoutubeVideoId(url) {
+        // Patrones para extraer el ID del video de YouTube
+        const patterns = [
+            /(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\n?#]+)/,
+            /(?:youtube\.com\/embed\/)([^&\n?#]+)/,
+            /(?:youtube\.com\/v\/)([^&\n?#]+)/
+        ];
+        
+        for (const pattern of patterns) {
+            const match = url.match(pattern);
+            if (match && match[1]) {
+                return match[1].split('?')[0].split('&')[0];
+            }
+        }
+        
+        return null;
+    }
 
     // Manejar el botón de copiar al portapapeles
     document.querySelectorAll('.copy-btn').forEach(button => {

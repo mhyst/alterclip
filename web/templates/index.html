@@ -60,7 +60,9 @@
                                         <td>
                                             <a href="{{ item.url }}" 
                                                class="text-decoration-none" 
-                                               data-url-id="{{ item.id }}">
+                                               target="_blank"
+                                               data-url-id="{{ item.id }}"
+                                               onclick="event.preventDefault(); markAndOpen(this, event);">
                                                 {{ item.title|truncate(60) }}
                                             </a>
                                             {% if item.visto == 0 %}
