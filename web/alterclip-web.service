@@ -1,0 +1,25 @@
+[Unit]
+Description=AlterClip Web Service
+After=network.target
+
+[Service]
+User=www-data
+Group=www-data
+WorkingDirectory=/home/mhyst/Proyectos/alterclip/web
+# Usar el intérprete de Python del sistema
+ExecStart=/usr/bin/python3 app.py
+Restart=always
+RestartSec=10
+
+# Configuración de seguridad
+PrivateTmp=true
+ProtectSystem=full
+NoNewPrivileges=true
+
+# Configuración de logs
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=alterclip-web
+
+[Install]
+WantedBy=multi-user.target

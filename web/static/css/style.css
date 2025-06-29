@@ -1,0 +1,325 @@
+/* Estilos generales */
+body {
+    background-color: #f8f9fa;
+    color: #333;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+/* Barra de navegación */
+.navbar {
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    padding: 0.8rem 0;
+}
+
+.navbar-brand {
+    font-weight: 600;
+    font-size: 1.4rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+/* Tarjetas */
+.card {
+    border: none;
+    border-radius: 10px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+    margin-bottom: 1.5rem;
+    overflow: hidden;
+}
+
+.card-header {
+    background-color: #f8f9fa;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+    font-weight: 600;
+    padding: 1rem 1.25rem;
+}
+
+/* Tablas */
+.table {
+    margin-bottom: 0;
+}
+
+.table th {
+    font-weight: 600;
+    border-top: none;
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    letter-spacing: 0.5px;
+    color: #6c757d;
+    background-color: #f8f9fa;
+}
+
+.table td {
+    vertical-align: middle;
+    padding: 1rem 0.75rem;
+}
+
+.table-hover tbody tr:hover {
+    background-color: rgba(13, 110, 253, 0.03);
+}
+
+/* Badges */
+.badge {
+    font-weight: 500;
+    padding: 0.35em 0.65em;
+    border-radius: 4px;
+}
+
+/* Botones */
+.btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-weight: 500;
+    padding: 0.4rem 0.8rem;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+}
+
+.btn-sm {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.75rem;
+}
+
+/* Estilos para el offcanvas */
+.offcanvas {
+    width: 300px;
+    max-width: 80%;
+}
+
+.offcanvas-header {
+    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+    padding: 1rem 1.25rem;
+}
+
+.offcanvas-title {
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+/* Estilos para el árbol de tags */
+#tagTree {
+    padding: 0.5rem 0;
+}
+
+#tagTree ul {
+    padding-left: 1rem;
+    margin-bottom: 0;
+}
+
+#tagTree li {
+    margin-bottom: 0.25rem;
+    position: relative;
+}
+
+#tagTree a {
+    color: #495057;
+    text-decoration: none;
+    display: block;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+}
+
+#tagTree a:hover, #tagTree a.active {
+    background-color: #e9ecef;
+    color: #0d6efd;
+}
+
+#tagTree a i {
+    margin-right: 0.5rem;
+    opacity: 0.6;
+}
+
+/* Estilos para el footer */
+footer {
+    margin-top: 3rem;
+    padding: 1.5rem 0;
+    background-color: #f8f9fa;
+    border-top: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+/* Estilos para los enlaces */
+a {
+    color: #0d6efd;
+    text-decoration: none;
+    transition: color 0.2s ease;
+}
+
+a:hover {
+    color: #0a58ca;
+    text-decoration: none;
+}
+
+/* Estilos para los formularios */
+.form-control, .form-select {
+    border-radius: 6px;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid #dee2e6;
+    transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+
+.form-control:focus, .form-select:focus {
+    border-color: #86b7fe;
+    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.15);
+}
+
+/* Estilos para el estado de carga */
+.loading {
+    position: relative;
+    pointer-events: none;
+    opacity: 0.7;
+}
+
+.loading:after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 20px;
+    height: 20px;
+    margin: -10px 0 0 -10px;
+    border: 2px solid #fff;
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* Estilos para los tooltips */
+.tooltip {
+    pointer-events: none;
+}
+
+/* Estilos para el contador de tags */
+.tag-count {
+    font-size: 0.7rem;
+    background-color: #e9ecef;
+    color: #6c757d;
+    border-radius: 10px;
+    padding: 0.15rem 0.4rem;
+    margin-left: 0.3rem;
+}
+
+/* Estilos para los mensajes flash */
+.alert {
+    border: none;
+    border-radius: 6px;
+    padding: 0.75rem 1.25rem;
+    margin-bottom: 1.5rem;
+}
+
+.alert-success {
+    background-color: #d1e7dd;
+    color: #0f5132;
+}
+
+.alert-danger {
+    background-color: #f8d7da;
+    color: #842029;
+}
+
+.alert-warning {
+    background-color: #fff3cd;
+    color: #664d03;
+}
+
+/* Estilos para los badges de plataforma */
+.platform-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.25rem 0.6rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    text-transform: capitalize;
+}
+
+/* Estilos para la paginación */
+.pagination {
+    margin: 1.5rem 0 0;
+    justify-content: center;
+}
+
+.page-link {
+    border: none;
+    color: #0d6efd;
+    padding: 0.5rem 0.75rem;
+    margin: 0 0.2rem;
+    border-radius: 4px !important;
+    transition: all 0.2s ease;
+}
+
+.page-link:hover {
+    background-color: #e9ecef;
+    color: #0a58ca;
+}
+
+.page-item.active .page-link {
+    background-color: #0d6efd;
+    border-color: #0d6efd;
+}
+
+/* Estilos para móviles */
+@media (max-width: 768px) {
+    .table-responsive {
+        border: none;
+    }
+    
+    .table thead {
+        display: none;
+    }
+    
+    .table, .table tbody, .table tr, .table td {
+        display: block;
+        width: 100%;
+    }
+    
+    .table tr {
+        margin-bottom: 1rem;
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        overflow: hidden;
+    }
+    
+    .table td {
+        padding: 0.75rem;
+        text-align: right;
+        position: relative;
+        padding-left: 45%;
+    }
+    
+    .table td::before {
+        content: attr(data-label);
+        position: absolute;
+        left: 0.75rem;
+        width: 40%;
+        padding-right: 1rem;
+        font-weight: 600;
+        text-align: left;
+        color: #6c757d;
+    }
+    
+    .table td:first-child {
+        background-color: #f8f9fa;
+        font-weight: 600;
+        text-align: left;
+        padding-left: 0.75rem;
+    }
+    
+    .table td:first-child::before {
+        display: none;
+    }
+    
+    .btn-group {
+        width: 100%;
+        justify-content: flex-end;
+    }
+}

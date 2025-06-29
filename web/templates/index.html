@@ -1,0 +1,180 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <h2 class="mb-3">
+            <i class="bi bi-clock-history"></i> Historial de Contenidos
+        </h2>
+        
+        <!-- Filtros -->
+        <div class="card mb-4">
+            <div class="card-body">
+                <form id="filterForm" class="row g-3">
+                    <div class="col-md-4">
+                        <label for="platformFilter" class="form-label">Plataforma</label>
+                        <select class="form-select" id="platformFilter" name="platform">
+                            <option value="">Todas las plataformas</option>
+                            {% for platform in platforms %}
+                                <option value="{{ platform }}" 
+                                    {% if current_platform == platform %}selected{% endif %}>
+                                    {{ platform }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-8 d-flex align-items-end">
+                        <button type="submit" class="btn btn-primary me-2">
+                            <i class="bi bi-funnel"></i> Filtrar
+                        </button>
+                        {% if current_tag or current_platform or current_search %}
+                            <a href="{{ url_for('index') }}" class="btn btn-outline-secondary">
+                                <i class="bi bi-x-circle"></i> Limpiar filtros
+                            </a>
+                        {% endif %}
+                    </div>
+                </form>
+            </div>
+        </div>
+        
+        <!-- Resultados -->
+        <div class="card">
+            <div class="card-body">
+                {% if history %}
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th style="width: 5%;">#</th>
+                                    <th style="width: 40%;">Título</th>
+                                    <th style="width: 15%;">Plataforma</th>
+                                    <th style="width: 20%;">Tags</th>
+                                    <th style="width: 15%;">Fecha</th>
+                                    <th style="width: 5%;">Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in history %}
+                                    <tr class="{% if item.visto == 0 %}table-warning{% endif %}">
+                                        <td>{{ loop.index }}</td>
+                                        <td>
+                                            <a href="{{ item.url }}" target="_blank" class="text-decoration-none">
+                                                {{ item.title|truncate(60) }}
+                                            </a>
+                                            {% if item.visto == 0 %}
+                                                <span class="badge bg-warning text-dark ms-2">Nuevo</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if item.platform %}
+                                                <span class="badge bg-info text-dark">
+                                                    {{ item.platform }}
+                                                </span>
+                                            {% else %}
+                                                <span class="text-muted">-</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if item.tags %}
+                                                <div class="d-flex flex-wrap gap-1">
+                                                    {% for tag in item.tags %}
+                                                        <a href="{{ url_for('index', tag=tag) }}" class="badge bg-secondary text-decoration-none">
+                                                            {{ tag }}
+                                                        </a>
+                                                    {% endfor %}
+                                                </div>
+                                            {% else %}
+                                                <span class="text-muted">Sin etiquetas</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if item.timestamp %}
+                                                {{ item.timestamp.split('T')[0] }}
+                                            {% else %}
+                                                <span class="text-muted">-</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            <div class="btn-group btn-group-sm" role="group">
+                                                <a href="{{ item.url }}" target="_blank" class="btn btn-outline-primary" 
+                                                   data-bs-toggle="tooltip" data-bs-placement="top" title="Abrir enlace">
+                                                    <i class="bi bi-box-arrow-up-right"></i>
+                                                </a>
+                                                <button class="btn btn-outline-secondary copy-btn" 
+                                                        data-url="{{ item.url }}"
+                                                        data-bs-toggle="tooltip" data-bs-placement="top" title="Copiar enlace">
+                                                    <i class="bi bi-clipboard"></i>
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="text-center py-5">
+                        <i class="bi bi-inbox" style="font-size: 3rem; opacity: 0.3;"></i>
+                        <h5 class="mt-3">No se encontraron resultados</h5>
+                        <p class="text-muted">
+                            {% if current_search or current_tag or current_platform %}
+                                Intenta con otros términos de búsqueda o <a href="{{ url_for('index') }}">limpiar los filtros</a>.
+                            {% else %}
+                                Aún no hay contenido en el historial.
+                            {% endif %}
+                        </p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Manejar el envío del formulario de filtros
+    document.getElementById('filterForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const formData = new FormData(this);
+        const params = new URLSearchParams();
+        
+        // Añadir solo los parámetros que tienen valor
+        for (const [key, value] of formData.entries()) {
+            if (value) {
+                params.append(key, value);
+            }
+        }
+        
+        // Redirigir con los parámetros de búsqueda
+        window.location.href = '{{ url_for("index") }}?' + params.toString();
+    });
+    
+    // Manejar el botón de copiar al portapapeles
+    document.querySelectorAll('.copy-btn').forEach(button => {
+        button.addEventListener('click', function() {
+            const url = this.getAttribute('data-url');
+            navigator.clipboard.writeText(url).then(() => {
+                // Cambiar el icono temporalmente para indicar éxito
+                const icon = this.querySelector('i');
+                const originalClass = icon.className;
+                icon.className = 'bi bi-check';
+                
+                // Restaurar el icono después de 2 segundos
+                setTimeout(() => {
+                    icon.className = originalClass;
+                }, 2000);
+            });
+        });
+    });
+    
+    // Inicializar tooltips
+    document.addEventListener('DOMContentLoaded', function() {
+        var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+        var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+            return new bootstrap.Tooltip(tooltipTriggerEl);
+        });
+    });
+</script>
+{% endblock %}
