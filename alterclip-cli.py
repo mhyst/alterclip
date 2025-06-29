@@ -715,7 +715,7 @@ alterclip-cli - Interfaz de línea de comandos para alterclip
     alterclip-cli play 123
 
     # Reproducir el último video
-    alterclip-cli play
+    alterclip-cli play -1
 
     # Copiar una URL con ID 123 al portapapeles
     alterclip-cli copy 123
