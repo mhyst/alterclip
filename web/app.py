@@ -227,6 +227,27 @@ def api_tags():
     tags = get_tags()
     return jsonify(tags)
 
+@app.route('/api/mark_as_viewed/<int:url_id>', methods=['POST'])
+def mark_as_viewed(url_id):
+    """Marca una URL como vista"""
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        
+        # Incrementar el contador de visto
+        cursor.execute("""
+            UPDATE streaming_history 
+            SET visto = COALESCE(visto, 0) + 1 
+            WHERE id = ?
+        """, (url_id,))
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({"status": "success", "message": "Marcado como visto"}), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
 @app.route('/api/tag_hierarchy')
 def api_tag_hierarchy():
     """API para obtener la jerarquía de tags en formato anidado"""

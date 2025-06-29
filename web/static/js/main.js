@@ -6,9 +6,54 @@ document.addEventListener('DOMContentLoaded', function() {
         return new bootstrap.Tooltip(tooltipTriggerEl);
     });
     
+    // Función para marcar un vídeo como visto
+    function markAsViewed(urlId, linkElement) {
+        fetch(`/api/mark_as_viewed/${urlId}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                // Marcar la fila como vista en la interfaz
+                const row = linkElement.closest('tr');
+                if (row) {
+                    row.classList.remove('table-warning');
+                    const badge = row.querySelector('.badge.bg-warning');
+                    if (badge) {
+                        badge.remove();
+                    }
+                }
+            }
+        })
+        .catch(error => console.error('Error al marcar como visto:', error));
+    }
+
+    // Manejar clics en los enlaces de los vídeos
+    document.addEventListener('click', function(e) {
+        const link = e.target.closest('a[data-url-id]');
+        if (link && !e.ctrlKey && !e.metaKey) {
+            e.preventDefault();
+            const urlId = link.getAttribute('data-url-id');
+            const url = link.getAttribute('href');
+            
+            // Marcar como visto
+            markAsViewed(urlId, link);
+            
+            // Abrir el enlace en una nueva pestaña después de un pequeño retraso
+            // para asegurar que la petición AJAX se envíe
+            setTimeout(() => {
+                window.open(url, '_blank');
+            }, 100);
+        }
+    });
+
     // Manejar el botón de copiar al portapapeles
     document.querySelectorAll('.copy-btn').forEach(button => {
-        button.addEventListener('click', function() {
+        button.addEventListener('click', function(e) {
+            e.stopPropagation(); // Evitar que el evento se propague al enlace
             const url = this.getAttribute('data-url');
             navigator.clipboard.writeText(url).then(() => {
                 // Cambiar el icono temporalmente para indicar éxito

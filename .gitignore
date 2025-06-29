@@ -4,3 +4,4 @@ alterclip.egg-info/
 changes/
 nohup.out
 __pycache__/
+web/data/

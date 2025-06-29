@@ -58,7 +58,9 @@
                                     <tr class="{% if item.visto == 0 %}table-warning{% endif %}">
                                         <td>{{ loop.index }}</td>
                                         <td>
-                                            <a href="{{ item.url }}" target="_blank" class="text-decoration-none">
+                                            <a href="{{ item.url }}" 
+                                               class="text-decoration-none" 
+                                               data-url-id="{{ item.id }}">
                                                 {{ item.title|truncate(60) }}
                                             </a>
                                             {% if item.visto == 0 %}
