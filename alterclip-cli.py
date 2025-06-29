@@ -972,7 +972,15 @@ def show_hierarchy_json() -> None:
     except Exception as e:
         print(f"Error al mostrar la jerarquía: {e}", file=sys.stderr)
 
-def suggest_IA_tags(title: str):
+def get_suggest_IA_tags(title: str):
+    """Obtiene sugerencias de etiquetas IA para un título dado.
+    
+    Args:
+        title: Título para el que se desean sugerencias de etiquetas
+        
+    Returns:
+        dict: Objeto JSON con la sugerencia de etiqueta o None en caso de error
+    """
     hierarchy = get_hierarchy_json()
     
     prompt = f"""
@@ -997,7 +1005,6 @@ Devuelve un objeto JSON con una de estas dos opciones:
   "etiqueta": "Ruta/Nueva/Etiqueta",
   "motivo": "Breve explicación"
 }}
-
 No expliques nada fuera del objeto JSON y asegúrate de que el campo "etiqueta" incluya toda la jerarquía (separada por "/").
 """
     # Cargar la API key de OpenAI desde variable de entorno
@@ -1005,23 +1012,18 @@ No expliques nada fuera del objeto JSON y asegúrate de que el campo "etiqueta" 
     if not OPENAI_API_KEY:
         print("Advertencia: No se encontró la variable de entorno OPENAI_API_KEY. "
             "La funcionalidad de sugerencias de IA no estará disponible.", file=sys.stderr)
-
-    if not OPENAI_API_KEY:
-        print("Error: No se ha configurado la variable de entorno OPENAI_API_KEY", file=sys.stderr)
         return None
         
     try:
         client = openai.OpenAI(api_key=OPENAI_API_KEY)
         response = client.chat.completions.create(
-            model="gpt-4-turbo",
+            model="gpt-4o-mini",
             messages=[{"role": "user", "content": prompt}],
             temperature=0.3
         )
         content = response.choices[0].message.content
         try:
-            suggestion = json.loads(content)
-            print(json.dumps(suggestion, indent=2, ensure_ascii=False))
-            return suggestion
+            return json.loads(content)
         except json.JSONDecodeError:
             print("⚠️ La respuesta no fue JSON válido:")
             print(content)
@@ -1029,6 +1031,22 @@ No expliques nada fuera del objeto JSON y asegúrate de que el campo "etiqueta" 
     except Exception as e:
         print(f"Error al contactar con la API: {e}")
         return None
+
+def show_suggest_IA_tags(title: str):
+    """Muestra por pantalla las sugerencias de etiquetas IA para un título.
+    
+    Args:
+        title: Título para el que se desean mostrar sugerencias de etiquetas
+        
+    Returns:
+        dict: Objeto JSON con la sugerencia de etiqueta o None en caso de error
+    """
+    suggestion = get_suggest_IA_tags(title)
+    if suggestion is not None:
+        print(json.dumps(suggestion, indent=2, ensure_ascii=False))
+    return suggestion
+
+
 
 def get_available_tags() -> List[str]:
     """Obtiene la lista de tags disponibles en la base de datos"""
@@ -1244,7 +1262,7 @@ def main() -> None:
             elif args.tag_command == 'json':
                 show_hierarchy_json()
             elif args.tag_command == 'suggest':
-                suggest_IA_tags(args.title)
+                show_suggest_IA_tags(args.title)
             elif args.tag_command == 'update':
                 update_tag(args.name, args.new_name, args.description)
             elif args.tag_command == 'url':
