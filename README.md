@@ -115,10 +115,13 @@ Ejemplos de uso:
 ./alterclip-cli tag add "Antiguas Civilizaciones" --parent "Arqueología"
 
 # Asociar un tag con una URL
-./alterclip-cli tag url add 123 "Arqueología"
+./alterclip-cli tag url add 1 "Arqueología"
 
-# Eliminar la asociación entre una URL y un tag
-./alterclip-cli tag url rm 123 "Arqueología"
+# Eliminar una asociación de tag
+./alterclip-cli tag url rm 1 "Arqueología"
+
+# Asignar automáticamente etiquetas con IA
+./alterclip-cli tag auto 1  # Etiqueta automáticamente la URL con ID 1
 
 # Buscar URLs con un tag específico
 ./alterclip-cli hist --tags "Arqueología"

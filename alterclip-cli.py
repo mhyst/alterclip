@@ -437,6 +437,31 @@ def play_streaming_url(url_id: int) -> None:
     except Exception as e:
         print(f"Error al reproducir URL: {e}", file=sys.stderr)
 
+def get_title_by_id(url_id: int) -> str:
+    """Obtiene el título de una entrada del historial por su ID
+    
+    Args:
+        url_id: ID de la entrada en streaming_history
+        
+    Returns:
+        str: El título de la entrada o None si no se encuentra
+    """
+    try:
+        cursor = conn.cursor()
+        cursor.execute('SELECT title FROM streaming_history WHERE id = ?', (url_id,))
+        result = cursor.fetchone()
+        
+        if not result:
+            print(f"No se encontró ninguna entrada con ID {url_id}", file=sys.stderr)
+            return None
+            
+        return result[0]
+    except Exception as e:
+        print(f"Error al obtener el título: {e}", file=sys.stderr)
+        return None
+
+
+
 def copy_streaming_url(url_id: int) -> None:
     """Copia una URL de streaming al portapapeles con prefijo share.only/ usando su ID"""
     try:
@@ -649,6 +674,9 @@ alterclip-cli - Interfaz de línea de comandos para alterclip
                 nombre: Nombre actual del tag
                 nuevo_nombre: Nuevo nombre para el tag
                 nueva_descripción: Nueva descripción del tag
+            auto [ID]
+                Asigna automáticamente etiquetas a una URL usando IA
+                ID: Identificador numérico de la URL a etiquetar
 """, 'white'))
     
     print(colored("""
@@ -715,6 +743,9 @@ alterclip-cli - Interfaz de línea de comandos para alterclip
 
     # Eliminar una asociación entre URL y tag
     alterclip-cli tag url rm 123 "Arqueología"
+    
+    # Asignar automáticamente etiquetas con IA
+    alterclip-cli tag auto 123
 
     # Reproducir múltiples URLs en secuencia
     alterclip-cli playall --tags "Filosofía" --shuffle
@@ -1048,6 +1079,81 @@ def show_suggest_IA_tags(title: str):
 
 
 
+def assign_IA_suggestion(url_id: int) -> bool:
+    """Asigna etiquetas a una URL basándose en sugerencias de IA.
+    
+    Args:
+        url_id: ID de la URL a la que asignar etiquetas
+        
+    Returns:
+        bool: True si se asignó la etiqueta correctamente, False en caso contrario
+    """
+    try:
+        # Obtener el título de la URL
+        title = get_title_by_id(url_id)
+        if not title:
+            print(f"No se encontró la URL con ID {url_id}", file=sys.stderr)
+            return False
+            
+        # Obtener sugerencia de la IA
+        suggestion = get_suggest_IA_tags(title)
+        if not suggestion:
+            print("No se pudo obtener una sugerencia de la IA", file=sys.stderr)
+            return False
+            
+        print(f"Sugerencia de IA: {suggestion}")
+        
+        # Verificar que la acción sea 'añadir' o 'asignar'
+        if suggestion.get("acción") not in ["añadir", "asignar"]:
+            print(f"AcciÃ³n no vÃ¡lida en la sugerencia de IA: {suggestion.get('acciÃ³n')}", file=sys.stderr)
+            return False
+            
+        # Obtener la ruta de etiquetas y dividirla por '/', manteniendo los espacios en los nombres
+        etiqueta_path = suggestion.get("etiqueta", "")
+        if not etiqueta_path:
+            print("No se especificó una etiqueta en la sugerencia", file=sys.stderr)
+            return False
+            
+        # Dividir la ruta por '/' para obtener los niveles de jerarquía
+        tags = etiqueta_path.split('/')
+        if not tags:
+            print("La ruta de etiquetas está vacía", file=sys.stderr)
+            return False
+            
+        # Construir la jerarquía de etiquetas
+        parent_tag = None
+        for tag in tags:
+            # Si el tag está vacío, lo saltamos
+            if not tag.strip():
+                continue
+                
+            tag = tag.strip()  # Limpiar espacios en blanco
+            
+            # Verificar si el tag ya existe
+            tag_id = get_tag_id(tag)
+            if not tag_id:
+                # Si el tag no existe, lo creamos
+                print(f"Añadiendo etiqueta faltante: {tag}")
+                
+                # Añadir el tag con su padre correspondiente
+                add_tag(tag, parent_name=parent_tag)
+                
+            # Actualizar el padre para la siguiente iteración
+            parent_tag = tag
+            
+        # La última etiqueta es la que asignaremos a la URL
+        last_tag = parent_tag
+            
+        # Asignar la Ãºltima etiqueta a la URL
+        last_tag = tags[-1]
+        print(f"Asignando etiqueta '{last_tag}' a la URL ID {url_id}")
+        return add_tag_to_url(url_id, last_tag)
+        
+    except Exception as e:
+        print(f"Error al asignar etiquetas con IA: {e}", file=sys.stderr)
+        return False
+
+
 def get_available_tags() -> List[str]:
     """Obtiene la lista de tags disponibles en la base de datos"""
     try:
@@ -1109,6 +1215,7 @@ def main() -> None:
       tag list             Lista todos los tags
       tag hierarchy        Muestra la jerarquía completa de tags
       tag update [NOMBRE]  Actualiza un tag
+      tag auto [ID]        Asigna automáticamente etiquetas con IA
       tag url add [ID] [TAG]   Asocia un tag con una URL
       tag url rm [ID] [TAG]   Elimina la asociación entre una URL y un tag
     '''
@@ -1202,6 +1309,10 @@ def main() -> None:
     update_parser.add_argument('--new-name', help='Nuevo nombre para el tag')
     update_parser.add_argument('--description', help='Nueva descripción para el tag')
 
+    # Comando tag auto (asignación automática con IA)
+    auto_parser = tag_subparsers.add_parser('auto', help='Asigna automáticamente etiquetas a una URL usando IA')
+    auto_parser.add_argument('url_id', type=int, help='ID de la URL a etiquetar')
+    
     # Comandos para gestionar tags de URLs
     url_parser = tag_subparsers.add_parser('url', help='Gestiona tags de URLs')
     url_subparsers = url_parser.add_subparsers(dest='url_command', help='Comandos de tags de URLs')
@@ -1265,6 +1376,11 @@ def main() -> None:
                 show_suggest_IA_tags(args.title)
             elif args.tag_command == 'update':
                 update_tag(args.name, args.new_name, args.description)
+            elif args.tag_command == 'auto':
+                if assign_IA_suggestion(args.url_id):
+                    print("Etiquetas asignadas correctamente")
+                else:
+                    print("No se pudieron asignar las etiquetas", file=sys.stderr)
             elif args.tag_command == 'url':
                 if args.url_command == 'add':
                     add_tag_to_url(args.url_id, args.tag_name)
