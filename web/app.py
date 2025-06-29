@@ -5,6 +5,7 @@ import sqlite3
 from pathlib import Path
 import unicodedata
 from datetime import datetime
+from platformdirs import user_log_dir
 
 app = Flask(__name__)
 
@@ -15,11 +16,7 @@ def inject_now():
 
 def get_db_path() -> Path:
     """Obtiene la ruta de la base de datos"""
-    # Ruta relativa al directorio de la aplicación web
-    db_path = Path(__file__).parent / "data" / "streaming_history.db"
-    # Crear el directorio si no existe
-    db_path.parent.mkdir(parents=True, exist_ok=True)
-    return db_path
+    return Path(user_log_dir("alterclip")) / "streaming_history.db"
 
 def get_connection():
     """Crea y devuelve una conexión a la base de datos"""
