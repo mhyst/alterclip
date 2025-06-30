@@ -33,6 +33,8 @@
    pip install alterclip
    ```
 
+Nota: Este método de instalación estará equiparado con los cambios publicados en la última release, aunque es posible que haya algunos cambios menores en el repositorio que aún no hayan sido liberados. En cualquier caso, utilizar la versión de la última release es más seguro de cara a posibles errores.
+
 ### Opción 2: Instalación desde el repositorio de GitHub
 
 1. Clona el repositorio:
