@@ -1,6 +1,6 @@
 # 🧠 Alterclip
 
-**Alterclip** es una herramienta en segundo plano que monitoriza tu portapapeles y modifica automáticamente los enlaces que copias, para hacerlos más seguros o aptos para compartir en plataformas como Telegram. Además, en modo streaming, abre directamente vídeos de YouTube o contenido de Instagram con tu reproductor multimedia favorito.
+**Alterclip** es una herramienta en segundo plano que monitoriza tu portapapeles y modifica automáticamente los enlaces que copias, para hacerlos más seguros o aptos para compartir en plataformas como Telegram. Además, en modo streaming, abre directamente vídeos de YouTube, Instagram y Archive.org con tu reproductor multimedia favorito.
 
 ---
 
@@ -8,10 +8,11 @@
 
 - 🔁 Reemplaza dominios por versiones alternativas (más compartibles).
 - 📋 Monitoriza el portapapeles de forma continua.
-- 🎬 Abre automáticamente vídeos de YouTube, Instagram y Facebook con tu reproductor multimedia favorito.
+- 🎬 Abre automáticamente vídeos de YouTube, Instagram, Facebook y Archive.org con tu reproductor multimedia favorito.
 - 📚 Almacena el historial de vídeos reproducidos con título y plataforma.
 - 📦 Compatible con Linux, macOS y Windows (con pequeñas adaptaciones).
 - 🔧 Dos modos de funcionamiento con cambio dinámico mediante señales.
+- 🌐 Aplicación web integrada para consultar y gestionar el historial de forma visual.
 - 📊 Interfaz de línea de comandos para gestionar el historial y reproducir vídeos guardados.
 - 🔍 Búsqueda avanzada en el historial con soporte para acentos y mayúsculas/minúsculas.
 - 📋 Copia de URLs al portapapeles con prefijo share.only/ para compartir fácilmente.
@@ -25,19 +26,43 @@
 
 ## 🔧 Requisitos
 
-- Python 3.6 o superior
-- Paquetes Python:
+- **Python 3.8** o superior
 
+### Dependencias principales
+Instala las dependencias con:
+
+```bash
+pip install -r requirements.txt
+```
+
+O manualmente:
+- `pyperclip>=1.8.2` - Para el manejo del portapapeles
+- `platformdirs>=3.9.0` - Para rutas de configuración multiplataforma
+- `plyer>=2.1.0` - Para notificaciones del sistema
+- `termcolor>=2.3.0` - Para salida de colores en la terminal
+
+### Dependencias opcionales
+- **Reproductor multimedia**: `mpv` (recomendado), `vlc` o similar para reproducción de vídeos
+- **Interfaz web**: `flask` para la interfaz web de consulta del historial
   ```bash
-  pip install pyperclip platformdirs plyer
+  pip install flask
   ```
-
-- Reproductor multimedia como `mpv`, `vlc`, etc. (por defecto usa `mpv`).
-- Linux (uso de señales POSIX como `SIGUSR1`/`SIGUSR2`; no compatible con Windows para eso).
-- Para usar la API de YouTube (opcional pero recomendado para mejor precisión):
+- **API de YouTube** (recomendado para mejor precisión):
   - Crea un proyecto en Google Cloud Platform
-  - Obtén una API key de YouTube Data API v3
+  - Activa YouTube Data API v3
   - Configura la variable de entorno `YOUTUBE_API_KEY` con tu clave
+
+- **Sugerencias y taxonomía por IA** (opcional):
+  - Requiere una clave de API de OpenAI
+  - Se necesita un pago inicial mínimo de $5 USD en la cuenta de OpenAI
+  - Configura la variable de entorno `OPENAI_API_KEY` con tu clave
+  - Permite sugerencias automáticas de tags y categorización de contenido
+
+### Notas del sistema
+- **Linux**: Compatibilidad completa, incluyendo señales POSIX (`SIGUSR1`/`SIGUSR2`)
+- **Windows**: Compatible, pero sin soporte para señales POSIX
+- **macOS**: Compatible con algunas limitaciones en notificaciones
+- Nota: Alternativamente ofrece el comando alterclip-cli toggle que envía un paquete UDP al demonio para cambiar el modo de funcionamiento. Esta alternativa sí funciona en cualquier sistema.
 
 ---
 
@@ -53,7 +78,7 @@
 
 2. Copia una URL al portapapeles. Si es una de las compatibles, se transformará automáticamente y reemplazará el contenido del portapapeles.
 
-3. En modo **streaming**, si copias un enlace de YouTube, Instagram o Facebook, se abrirá automáticamente con tu reproductor.
+3. En modo **streaming**, si copias un enlace de YouTube, Instagram, Facebook y Archive.org, se abrirá automáticamente con tu reproductor.
 
 ### Usar la interfaz de línea de comandos
 
@@ -67,6 +92,7 @@ El CLI (`alterclip-cli.py`) te permite:
 - Eliminar entradas del historial
 - Cambiar el modo de funcionamiento
 - Gestionar tags jerárquicos para organizar el historial
+- Generar sugerencias de tags y taxonomía por IA
 
 Ejemplos de uso:
 
@@ -180,15 +206,8 @@ Algunos ejemplos de reemplazos automáticos de enlaces:
 | x.com            | fixupx.com       |
 | tiktok.com       | tfxktok.com      |
 | twitter.com      | fixupx.com       |
-| fixupx.com       | twixtter.com     |
-| reddit.com       | reddxt.com       |
-| onlyfans.com     | 0nlyfans.net     |
-| patreon.com      | pxtreon.com      |
 | pornhub.com      | pxrnhub.com      |
 | nhentai.net      | nhentaix.net     |
-| discord.gg       | disxcord.gg      |
-| discord.com      | discxrd.com      |
-| mediafire.com    | mediaf1re.com    |
 
 ## 📚 Historial de vídeos
 
@@ -198,8 +217,10 @@ Alterclip guarda automáticamente todas las URLs de streaming en su base de dato
 - Título del contenido (cuando está disponible)
 - Plataforma (YouTube, Instagram, Facebook)
 - Fecha y hora de reproducción
+- Tags asociados
+- Visto (cuantas veces se ha reproducido)
 
-Puedes acceder al historial usando el CLI:
+Puedes acceder al historial usando el CLI o mediante la aplicación web proporcionada en la carpeta web.
 
 ---
 
