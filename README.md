@@ -24,6 +24,39 @@
 
 ---
 
+## ⚙️ Instalación
+
+### Opción 1: Instalación desde PyPI (recomendado)
+
+1. Instala el paquete con pip:
+   ```bash
+   pip install alterclip
+   ```
+
+### Opción 2: Instalación desde el repositorio de GitHub
+
+1. Clona el repositorio:
+   ```bash
+   git clone https://github.com/tuusuario/alterclip.git
+   cd alterclip
+   ```
+
+2. Crea y activa un entorno virtual (recomendado):
+   ```bash
+   python -m venv venv
+   source venv/bin/activate  # En Windows: venv\Scripts\activate
+   ```
+
+3. Instala las dependencias:
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+4. Opcional: Instala en modo desarrollo para realizar ediciones:
+   ```bash
+   pip install -e .
+   ```
+
 ## 🔧 Requisitos
 
 - **Python 3.8** o superior
