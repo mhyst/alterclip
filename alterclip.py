@@ -55,20 +55,14 @@ class Alterclip:
             "x.com": "fixupx.com",
             "tiktok.com": "tfxktok.com",
             "twitter.com": "fixupx.com",
-            "fixupx.com": "twixtter.com",
-            "reddit.com": "reddxt.com",
-            "onlyfans.com": "0nlyfans.net",
-            "patreon.com": "pxtreon.com",
             "pornhub.com": "pxrnhub.com",
-            "nhentai.net": "nhentaix.net",
-            "discord.gg": "disxcord.gg",
-            "discord.com": "discxrd.com",
-            "mediafire.com": "mediaf1re.com"
+            "nhentai.net": "nhentaix.net"
         }
         self.streaming_sources = [
             "instagram.com",
             "youtube.com", "youtu.be",
-            "facebook.com"
+            "facebook.com",
+            "archive.org"
         ]
 
     def handler_streaming(self, signum, frame):
@@ -86,6 +80,45 @@ class Alterclip:
             app_name='Alterclip',
             timeout=20
         )
+    
+    def is_video_archive_url(self,url):
+        if not url.startswith("https://archive.org/details/"):
+            return False
+        
+        identifier = url.split("/details/")[-1]
+        api_url = f"https://archive.org/metadata/{identifier}"
+        
+        response = requests.get(api_url)
+        if response.status_code != 200:
+            return False
+        
+        data = response.json()
+        video_extensions = {".mp4", ".mkv", ".avi", ".mov", ".webm", ".ogv"}
+        
+        for file in data.get("files", []):
+            if file.get("source") != "original":
+                continue
+
+            name = file.get("name", "").lower()
+            if any(name.endswith(ext) for ext in video_extensions):
+                return True
+        
+        return False
+
+    def get_archive_title(self,url):
+        if not url.startswith("https://archive.org/details/"):
+            return None
+        
+        identifier = url.split("/details/")[-1]
+        api_url = f"https://archive.org/metadata/{identifier}"
+        
+        try:
+            response = requests.get(api_url)
+            response.raise_for_status()
+            data = response.json()
+            return data.get("metadata", {}).get("title")
+        except Exception:
+            return None
 
     def reproducir_streaming(self, url: str):
         def reproducir_en_hilo(url):
@@ -271,6 +304,11 @@ class Alterclip:
                 except Exception as e:
                     logging.error(f"Error al obtener título de Facebook: {e}")
                     return "Título no disponible", platform
+            elif 'archive.org' in url:
+                platform = 'Archive.org'
+                title = self.get_archive_title(url)
+                if title:
+                    return title, platform
 
             return "Título no disponible", "Desconocido"
         except Exception as e:
