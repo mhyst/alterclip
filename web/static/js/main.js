@@ -38,8 +38,67 @@ function markAndOpen(linkElement, event) {
     return false;
 }
 
+// Función para manejar el cambio de tema
+function toggleTheme() {
+    const html = document.documentElement;
+    const themeToggle = document.getElementById('themeToggle');
+    const icon = themeToggle.querySelector('i');
+    
+    // Cambiar entre temas
+    const isDark = html.getAttribute('data-bs-theme') === 'dark';
+    const newTheme = isDark ? 'light' : 'dark';
+    
+    // Actualizar el atributo del tema
+    html.setAttribute('data-bs-theme', newTheme);
+    
+    // Actualizar el icono
+    if (newTheme === 'dark') {
+        icon.classList.remove('bi-moon-stars');
+        icon.classList.add('bi-sun');
+        themeToggle.setAttribute('title', 'Cambiar a modo claro');
+    } else {
+        icon.classList.remove('bi-sun');
+        icon.classList.add('bi-moon-stars');
+        themeToggle.setAttribute('title', 'Cambiar a modo oscuro');
+    }
+    
+    // Guardar la preferencia en localStorage
+    localStorage.setItem('theme', newTheme);
+}
+
+// Función para inicializar el tema al cargar la página
+function initializeTheme() {
+    // Verificar la preferencia guardada o usar la preferencia del sistema
+    const savedTheme = localStorage.getItem('theme');
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    
+    // Aplicar el tema guardado o usar la preferencia del sistema
+    const theme = savedTheme || (prefersDark ? 'dark' : 'light');
+    
+    // Si el tema guardado es diferente al actual, cambiarlo
+    if (theme === 'dark' && document.documentElement.getAttribute('data-bs-theme') !== 'dark') {
+        toggleTheme(); // Esto actualizará el ícono y guardará la preferencia
+    }
+    
+    // Configurar el evento de cambio de tema del sistema
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
+        if (!localStorage.getItem('theme')) { // Solo cambiar si el usuario no ha establecido una preferencia
+            const newTheme = e.matches ? 'dark' : 'light';
+            document.documentElement.setAttribute('data-bs-theme', newTheme);
+        }
+    });
+}
+
 // Función para inicializar los tooltips
 document.addEventListener('DOMContentLoaded', function() {
+    // Inicializar el tema
+    initializeTheme();
+    
+    // Configurar el botón de alternar tema
+    const themeToggle = document.getElementById('themeToggle');
+    if (themeToggle) {
+        themeToggle.addEventListener('click', toggleTheme);
+    }
     // Inicializar tooltips
     var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
     var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {

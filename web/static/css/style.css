@@ -38,11 +38,35 @@
     padding: 0;
 }
 
+/* Variables de tema */
+:root {
+    --bs-body-bg: #f8f9fa;
+    --bs-body-color: #333;
+    --bs-card-bg: #fff;
+    --bs-card-header-bg: #f8f9fa;
+    --bs-card-border-color: rgba(0, 0, 0, 0.125);
+    --bs-table-bg: transparent;
+    --bs-table-striped-bg: rgba(0, 0, 0, 0.02);
+    --bs-table-hover-bg: rgba(13, 110, 253, 0.03);
+}
+
+[data-bs-theme="dark"] {
+    --bs-body-bg: #1a1a1a;
+    --bs-body-color: #e0e0e0;
+    --bs-card-bg: #2d2d2d;
+    --bs-card-header-bg: #333;
+    --bs-card-border-color: #444;
+    --bs-table-bg: transparent;
+    --bs-table-striped-bg: rgba(255, 255, 255, 0.03);
+    --bs-table-hover-bg: rgba(13, 110, 253, 0.1);
+}
+
 /* Estilos generales */
 body {
-    background-color: #f8f9fa;
-    color: #333;
+    background-color: var(--bs-body-bg);
+    color: var(--bs-body-color);
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    transition: background-color 0.3s ease, color 0.3s ease;
 }
 
 /* Barra de navegación */
@@ -61,23 +85,30 @@ body {
 
 /* Tarjetas */
 .card {
-    border: none;
+    border: 1px solid var(--bs-card-border-color);
     border-radius: 10px;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
     margin-bottom: 1.5rem;
     overflow: hidden;
+    background-color: var(--bs-card-bg);
+    transition: background-color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
 }
 
 .card-header {
-    background-color: #f8f9fa;
-    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+    background-color: var(--bs-card-header-bg);
+    border-bottom: 1px solid var(--bs-card-border-color);
     font-weight: 600;
     padding: 1rem 1.25rem;
+    transition: background-color 0.3s ease, border-color 0.3s ease;
 }
 
 /* Tablas */
 .table {
     margin-bottom: 0;
+    --bs-table-bg: var(--bs-card-bg);
+    --bs-table-striped-bg: var(--bs-table-striped-bg);
+    --bs-table-hover-bg: var(--bs-table-hover-bg);
+    color: var(--bs-body-color);
 }
 
 .table th {
@@ -86,8 +117,8 @@ body {
     text-transform: uppercase;
     font-size: 0.75rem;
     letter-spacing: 0.5px;
-    color: #6c757d;
-    background-color: #f8f9fa;
+    color: var(--bs-secondary-color);
+    background-color: var(--bs-card-header-bg);
 }
 
 .table td {
@@ -96,7 +127,7 @@ body {
 }
 
 .table-hover tbody tr:hover {
-    background-color: rgba(13, 110, 253, 0.03);
+    background-color: var(--bs-table-hover-bg);
 }
 
 /* Badges */
