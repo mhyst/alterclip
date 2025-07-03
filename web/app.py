@@ -47,12 +47,37 @@ def get_streaming_history(limit=50, search=None, tag=None, platform=None):
     params = []
     
     if tag:
-        query += """
-        JOIN url_tags ut ON sh.id = ut.url_id
-        JOIN tags t ON ut.tag_id = t.id
-        """
-        where_conditions.append("t.name = ?")
-        params.append(tag)
+        # Primero obtenemos el ID del tag
+        cursor.execute("SELECT id FROM tags WHERE name = ?", (tag,))
+        tag_row = cursor.fetchone()
+        
+        if tag_row:
+            tag_id = tag_row[0]
+            
+            # Obtenemos todos los IDs de tags hijos (incluyendo el propio tag)
+            cursor.execute("""
+                WITH RECURSIVE child_tags(id) AS (
+                    SELECT id FROM tags WHERE id = ?
+                    UNION ALL
+                    SELECT th.child_id 
+                    FROM tag_hierarchy th
+                    JOIN child_tags ct ON th.parent_id = ct.id
+                )
+                SELECT id FROM child_tags
+            """, (tag_id,))
+            
+            child_tag_ids = [row[0] for row in cursor.fetchall()]
+            
+            # Modificamos la consulta para buscar cualquiera de los tags hijos
+            query += """
+            JOIN url_tags ut ON sh.id = ut.url_id
+            """
+            placeholders = ','.join(['?'] * len(child_tag_ids))
+            where_conditions.append(f"ut.tag_id IN ({placeholders})")
+            params.extend(child_tag_ids)
+        else:
+            # Si el tag no existe, no devolvemos resultados
+            return []
     
     if search:
         where_conditions.append("(LOWER(sh.title) LIKE ? OR LOWER(sh.url) LIKE ?)")

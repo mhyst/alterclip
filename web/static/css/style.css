@@ -59,6 +59,14 @@
     --bs-table-bg: transparent;
     --bs-table-striped-bg: rgba(255, 255, 255, 0.03);
     --bs-table-hover-bg: rgba(13, 110, 253, 0.1);
+    
+    /* Colores personalizados para modo oscuro */
+    --bs-warning: #3a86ff;         /* Azul brillante para modo oscuro */
+    --bs-warning-dark: #2667cc;     /* Azul más oscuro para hover */
+    --bs-warning-bg-subtle: #0a1a33;  /* Fondo azul oscuro para resaltados */
+    --bs-warning-border-subtle: #1a3d80; /* Borde azul para resaltados */
+    --bs-primary: #6ea8fe;
+    --bs-link-color: #6ea8fe;
 }
 
 /* Estilos generales */
@@ -135,6 +143,16 @@ body {
     font-weight: 500;
     padding: 0.35em 0.65em;
     border-radius: 4px;
+}
+
+.badge.bg-warning {
+    background-color: var(--bs-warning, #3a86ff) !important;
+    color: #fff !important;
+}
+
+[data-bs-theme="dark"] .badge.bg-warning {
+    background-color: var(--bs-warning-dark, #2667cc) !important;
+    color: #fff !important;
 }
 
 /* Botones */
@@ -215,13 +233,13 @@ footer {
 
 /* Estilos para los enlaces */
 a {
-    color: #0d6efd;
+    color: var(--bs-link-color, #0d6efd);
     text-decoration: none;
     transition: color 0.2s ease;
 }
 
 a:hover {
-    color: #0a58ca;
+    color: #8cb8ff;
     text-decoration: none;
 }
 
@@ -297,7 +315,7 @@ a:hover {
 }
 
 .alert-warning {
-    background-color: #fff3cd;
+    background-color: var(--bs-warning-bg-subtle, #fff3cd);
     color: #664d03;
 }
 
@@ -338,6 +356,21 @@ a:hover {
     border-color: #0d6efd;
 }
 
+/* Sobrescribir estilos de table-warning */
+.table-warning, .table-warning > td, .table-warning > th {
+    background-color: var(--bs-warning-bg-subtle, #0a1a33);
+    color: var(--bs-body-color);
+}
+
+.table-hover .table-warning:hover {
+    background-color: var(--bs-warning-border-subtle, #1a3d80);
+}
+
+.table-hover .table-warning:hover > td,
+.table-hover .table-warning:hover > th {
+    background-color: var(--bs-warning-border-subtle, #1a3d80);
+}
+
 /* Estilos para móviles */
 @media (max-width: 768px) {
     .table-responsive {
@@ -375,11 +408,11 @@ a:hover {
         padding-right: 1rem;
         font-weight: 600;
         text-align: left;
-        color: #6c757d;
+        color: var(--bs-secondary-color, #6c757d);
     }
     
     .table td:first-child {
-        background-color: #f8f9fa;
+        background-color: var(--bs-card-header-bg, #f8f9fa);
         font-weight: 600;
         text-align: left;
         padding-left: 0.75rem;
