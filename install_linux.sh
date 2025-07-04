@@ -38,9 +38,9 @@ echo "Installing Python dependencies..."
 pip install --upgrade pip
 pip install -r requirements.txt
 
-# Create systemd service file
-SERVICE_FILE="/etc/systemd/system/alterclip.service"
-cat > $SERVICE_FILE <<EOL
+# Create main alterclip service
+MAIN_SERVICE_FILE="/etc/systemd/system/alterclip.service"
+cat > $MAIN_SERVICE_FILE <<EOL
 [Unit]
 Description=AlterClip Clipboard Manager
 After=network.target
@@ -50,19 +50,47 @@ Type=simple
 User=$SUDO_USER
 WorkingDirectory=$SCRIPT_DIR
 Environment="PATH=$SCRIPT_DIR/venv/bin:$PATH"
-ExecStart=$SCRIPT_DIR/venv/bin/python $SCRIPT_DIR/alterclip.py --web
+ExecStart=$SCRIPT_DIR/venv/bin/python $SCRIPT_DIR/alterclip.py
 Restart=always
 
 [Install]
 WantedBy=multi-user.target
 EOL
 
-# Reload systemd and enable service
+# Create web interface service
+WEB_SERVICE_FILE="/etc/systemd/system/alterclip-web.service"
+cat > $WEB_SERVICE_FILE <<EOL
+[Unit]
+Description=AlterClip Web Interface
+After=network.target alterclip.service
+
+[Service]
+Type=simple
+User=$SUDO_USER
+WorkingDirectory=$SCRIPT_DIR/web
+Environment="PATH=$SCRIPT_DIR/venv/bin:$PATH"
+ExecStart=$SCRIPT_DIR/venv/bin/python $SCRIPT_DIR/web/app.py
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+EOL
+
+# Reload systemd and enable services
 systemctl daemon-reload
 systemctl enable alterclip.service
+echo "Starting AlterClip service..."
 systemctl start alterclip.service
 
-echo "Installation complete! AlterClip is now running and will start on boot.
-echo "You can access the web interface at http://localhost:5000"
-echo "To check the status: sudo systemctl status alterclip"
-echo "To view logs: sudo journalctl -u alterclip -f"
+systemctl enable alterclip-web.service
+echo "Starting AlterClip Web service..."
+systemctl start alterclip-web.service
+
+echo "Installation complete!"
+echo "- AlterClip is now running and will start on boot"
+echo "- Web interface is available at http://localhost:5000"
+echo ""
+echo "Management commands:"
+echo "  Check status:      systemctl status alterclip alterclip-web"
+echo "  View main logs:    journalctl -u alterclip -f"
+echo "  View web logs:     journalctl -u alterclip-web -f"
