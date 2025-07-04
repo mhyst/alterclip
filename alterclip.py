@@ -330,7 +330,7 @@ class Alterclip:
         except:
             return ''
 
-    def get_id_by_title(self,title: str) -> int:
+    def get_id_by_url(self,url: str) -> int:
         """Obtiene el id de una entrada del historial por su título
         
         Args:
@@ -342,11 +342,11 @@ class Alterclip:
         try:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
-            cursor.execute('SELECT id FROM streaming_history WHERE title = ?', (title,))
+            cursor.execute('SELECT id FROM streaming_history WHERE url = ?', (url,))
             result = cursor.fetchone()
             
             if not result:
-                print(f"No se encontró ninguna entrada con título {title}", file=sys.stderr)
+                print(f"No se encontró ninguna entrada con url {url}", file=sys.stderr)
                 return None
                 
             return result[0]
@@ -359,7 +359,7 @@ class Alterclip:
         """Guarda una URL de streaming en la base de datos"""
         try:
             title, platform = self._get_content_title(url)
-            id = self.get_id_by_title(title)
+            id = self.get_id_by_url(url)
             if id:
                 logging.info(f"URL {url} ya existe en la base de datos con id {id}")
             else:
