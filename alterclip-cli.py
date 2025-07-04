@@ -461,7 +461,6 @@ def get_title_by_id(url_id: int) -> str:
         return None
 
 
-
 def copy_streaming_url(url_id: int) -> None:
     """Copia una URL de streaming al portapapeles con prefijo share.only/ usando su ID"""
     try:

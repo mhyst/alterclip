@@ -56,7 +56,7 @@
                             <tbody>
                                 {% for item in history %}
                                     <tr class="{% if item.visto == 0 %}table-warning{% endif %}">
-                                        <td>{{ loop.index }}</td>
+                                        <td>{{ item.id }}</td>
                                         <td>
                                             <a href="{{ item.url }}" 
                                                class="text-decoration-none" 
@@ -109,6 +109,18 @@
                                                         data-bs-toggle="tooltip" data-bs-placement="top" title="Copiar enlace">
                                                     <i class="bi bi-clipboard"></i>
                                                 </button>
+                                                <button class="btn btn-outline-success add-tag-btn" 
+                                                        data-id="{{ item.id }}"
+                                                        data-bs-toggle="tooltip" 
+                                                        data-bs-placement="top" 
+                                                        title="Añadir etiqueta">
+                                                    <i class="bi bi-tag"></i>
+                                                </button>
+                                                <button class="btn btn-outline-danger delete-btn" 
+                                                        data-id="{{ item.id }}"
+                                                        data-bs-toggle="tooltip" data-bs-placement="top" title="Eliminar del historial">
+                                                    <i class="bi bi-trash"></i>
+                                                </button>
                                             </div>
                                         </td>
                                     </tr>
@@ -133,10 +145,102 @@
         </div>
     </div>
 </div>
+
+<!-- Modal para añadir etiquetas -->
+<div class="modal fade" id="addTagModal" tabindex="-1" aria-labelledby="addTagModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="addTagModalLabel">Añadir etiqueta</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="currentUrlId">
+                <div class="mb-3">
+                    <label for="tagSelect" class="form-label">Seleccionar etiqueta</label>
+                    <select class="form-select" id="tagSelect">
+                        <option value="" selected disabled>Selecciona una etiqueta...</option>
+                        {% for tag in all_tags %}
+                            <option value="{{ tag.id }}" data-level="{{ tag.level }}">
+                                {% if tag.level > 0 %}{% for i in range(tag.level) %}&nbsp;&nbsp;&nbsp;{% endfor %}↳ {% endif %}{{ tag.name }}
+                                {% if tag.description %}<span class="text-muted"> - {{ tag.description }}</span>{% endif %}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="d-flex justify-content-between align-items-center">
+                    <a href="{{ url_for('manage_tags') }}" class="btn btn-sm btn-outline-secondary">
+                        <i class="bi bi-plus-circle"></i> Crear nueva etiqueta
+                    </a>
+                    <div>
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="button" class="btn btn-primary" id="saveTagBtn">Añadir etiqueta</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
 <script>
+    // Variables globales
+    let currentTagModal = null;
+
+    // Inicializar el modal
+    document.addEventListener('DOMContentLoaded', function() {
+        currentTagModal = new bootstrap.Modal(document.getElementById('addTagModal'));
+        
+        // Manejar clic en el botón de añadir etiqueta
+        document.querySelectorAll('.add-tag-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const urlId = this.getAttribute('data-id');
+                document.getElementById('currentUrlId').value = urlId;
+                document.getElementById('tagSelect').value = '';
+                currentTagModal.show();
+            });
+        });
+        
+        // Manejar el guardado de la etiqueta
+        document.getElementById('saveTagBtn').addEventListener('click', function() {
+            const urlId = document.getElementById('currentUrlId').value;
+            const tagId = document.getElementById('tagSelect').value;
+            
+            if (!tagId) {
+                alert('Por favor selecciona una etiqueta');
+                return;
+            }
+            
+            fetch(`/api/urls/${urlId}/tags`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ tag_id: tagId })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    // Recargar la página para mostrar los cambios
+                    window.location.reload();
+                } else {
+                    alert(data.message || 'Error al añadir la etiqueta');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error al conectar con el servidor');
+            });
+        });
+    });
+    
+    // Función para abrir el modal de añadir etiqueta
+    function openAddTagModal(urlId) {
+        document.getElementById('currentUrlId').value = urlId;
+        document.getElementById('tagSelect').value = '';
+        currentTagModal.show();
+    }
     // Manejar el envío del formulario de filtros
     document.getElementById('filterForm').addEventListener('submit', function(e) {
         e.preventDefault();

@@ -1,0 +1,339 @@
+{% extends "base.html" %}
+
+{% block head %}
+{{ super() }}
+<style>
+    /* Estilos base para el contenedor principal */
+    body {
+        min-height: 100vh;
+    }
+    
+    /* Estilos para el modo oscuro */
+    [data-bs-theme="dark"] {
+        background-color: #1a1d20;
+        color: #b0b0b0; /* Gris más oscuro para mejor legibilidad */
+    }
+    
+    [data-bs-theme="dark"] .card {
+        background-color: #2b3035;
+        border-color: #495057;
+        color: #b0b0b0; /* Gris más oscuro para mejor legibilidad */
+    }
+    
+    [data-bs-theme="dark"] .card-header {
+        background-color: #2b3035;
+        border-bottom-color: #495057;
+        color: #e9ecef;
+    }
+    
+    [data-bs-theme="dark"] .tag-item {
+        background-color: #2b3035 !important;
+        border: 1px solid #3e444a !important;
+        color: #b0b0b0 !important; /* Gris más oscuro para mejor legibilidad */
+    }
+    
+    [data-bs-theme="dark"] .tag-item:nth-child(odd) {
+        background-color: #212529 !important;
+    }
+    
+    [data-bs-theme="dark"] .modal-content {
+        background-color: #2b3035;
+        color: #b0b0b0; /* Gris más oscuro para mejor legibilidad */
+        border-color: #495057;
+    }
+    
+    [data-bs-theme="dark"] .modal-header,
+    [data-bs-theme="dark"] .modal-footer {
+        border-color: #495057;
+    }
+    
+    [data-bs-theme="dark"] .form-control,
+    [data-bs-theme="dark"] .form-control:focus {
+        background-color: #212529;
+        color: #b0b0b0; /* Gris más oscuro para mejor legibilidad */
+        border-color: #495057;
+    }
+    
+    [data-bs-theme="dark"] .form-control:focus {
+        box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+    }
+    
+    [data-bs-theme="dark"] .btn-outline-secondary {
+        color: #e9ecef;
+        border-color: #6c757d;
+    }
+    
+    [data-bs-theme="dark"] .btn-outline-secondary:hover {
+        background-color: #6c757d;
+        color: #fff;
+    }
+    
+    [data-bs-theme="dark"] .btn-close {
+        filter: invert(1) grayscale(100%) brightness(200%);
+    }
+    
+    .tag-item {
+        transition: all 0.2s ease;
+        margin-bottom: 0.25rem;
+    }
+    
+    .tag-item:hover {
+        background-color: rgba(0, 0, 0, 0.05) !important;
+    }
+    
+    [data-bs-theme="dark"] .tag-item:hover {
+        background-color: rgba(255, 255, 255, 0.05) !important;
+    }
+    
+    [data-bs-theme="dark"] .text-muted {
+        color: #adb5bd !important;
+    }
+    
+    [data-bs-theme="dark"] .list-group-item {
+        background-color: #2b3035;
+        border-color: #495057;
+        color: #b0b0b0; /* Gris más oscuro para mejor legibilidad */
+    }
+    
+    [data-bs-theme="dark"] .list-group-item:hover {
+        background-color: #3a4047;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row mb-4">
+        <div class="col-12 d-flex justify-content-between align-items-center">
+            <h2><i class="bi bi-tags"></i> Gestión de Etiquetas</h2>
+            <button id="addRootTagBtn" class="btn btn-primary">
+                <i class="bi bi-plus-circle"></i> Añadir etiqueta raíz
+            </button>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-body">
+            <div id="tagsTree" class="p-3">
+                <div class="text-center py-5">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Cargando...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal para añadir/editar etiquetas -->
+<div class="modal fade" id="tagModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="tagModalLabel">Nueva Etiqueta</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <form id="tagForm">
+                    <input type="hidden" id="tagParentId">
+                    <div class="mb-3">
+                        <label for="tagName" class="form-label">Nombre de la etiqueta</label>
+                        <input type="text" class="form-control" id="tagName" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="tagDescription" class="form-label">Descripción (opcional)</label>
+                        <textarea class="form-control" id="tagDescription" rows="2"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" id="saveTagBtn">Guardar</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const tagsTree = document.getElementById('tagsTree');
+        const addRootTagBtn = document.getElementById('addRootTagBtn');
+        const tagModal = new bootstrap.Modal(document.getElementById('tagModal'));
+        const tagForm = document.getElementById('tagForm');
+        const tagNameInput = document.getElementById('tagName');
+        const tagParentIdInput = document.getElementById('tagParentId');
+        const saveTagBtn = document.getElementById('saveTagBtn');
+        
+        let currentParentId = null;
+
+        // Cargar el árbol de etiquetas
+        function loadTags() {
+            fetch('/api/tag_hierarchy')
+                .then(response => response.json())
+                .then(tags => {
+                    tagsTree.innerHTML = '';
+                    if (tags.length === 0) {
+                        tagsTree.innerHTML = `
+                            <div class="text-center text-muted py-4">
+                                <i class="bi bi-tag" style="font-size: 2rem;"></i>
+                                <p class="mt-2">No hay etiquetas. Añade tu primera etiqueta raíz.</p>
+                            </div>
+                        `;
+                    } else {
+                        tagsTree.appendChild(renderTagList(tags));
+                    }
+                    initializeTooltips();
+                });
+        }
+
+        // Renderizar la lista de etiquetas de forma recursiva
+        function renderTagList(tags, level = 0) {
+            const ul = document.createElement('ul');
+            ul.className = 'list-unstyled';
+            ul.style.marginLeft = level > 0 ? '20px' : '0';
+            ul.style.borderLeft = level > 0 ? '2px solid #dee2e6' : 'none';
+            ul.style.paddingLeft = level > 0 ? '15px' : '0';
+
+            tags.forEach(tag => {
+                const li = document.createElement('li');
+                li.className = 'mb-2';
+                
+                const tagElement = document.createElement('div');
+                tagElement.className = 'd-flex align-items-center p-2 rounded tag-item';
+                tagElement.style.background = level % 2 === 0 ? 'var(--bs-light, #f8f9fa)' : 'var(--bs-white, #fff)';
+                
+                const tagName = document.createElement('span');
+                tagName.className = 'me-2 flex-grow-1';
+                tagName.textContent = tag.name;
+                
+                const btnGroup = document.createElement('div');
+                btnGroup.className = 'btn-group btn-group-sm';
+                
+                const addChildBtn = document.createElement('button');
+                addChildBtn.className = 'btn btn-outline-success btn-sm';
+                addChildBtn.innerHTML = '<i class="bi bi-plus-circle"></i>';
+                addChildBtn.title = 'Añadir etiqueta hija';
+                addChildBtn.dataset.bsToggle = 'tooltip';
+                addChildBtn.dataset.bsPlacement = 'top';
+                addChildBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    showTagModal(tag.id);
+                };
+                
+                const deleteBtn = document.createElement('button');
+                deleteBtn.className = 'btn btn-outline-danger btn-sm';
+                deleteBtn.innerHTML = '<i class="bi bi-trash"></i>';
+                deleteBtn.title = 'Eliminar etiqueta';
+                deleteBtn.dataset.bsToggle = 'tooltip';
+                deleteBtn.dataset.bsPlacement = 'top';
+                deleteBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    if (confirm(`¿Estás seguro de que quieres eliminar la etiqueta "${tag.name}"?`)) {
+                        deleteTag(tag.id);
+                    }
+                };
+                
+                btnGroup.appendChild(addChildBtn);
+                btnGroup.appendChild(deleteBtn);
+                
+                tagElement.appendChild(tagName);
+                tagElement.appendChild(btnGroup);
+                
+                li.appendChild(tagElement);
+                
+                // Si tiene hijos, renderizarlos
+                if (tag.children && tag.children.length > 0) {
+                    li.appendChild(renderTagList(tag.children, level + 1));
+                }
+                
+                ul.appendChild(li);
+            });
+            
+            return ul;
+        }
+
+        // Mostrar el modal para añadir una etiqueta
+        function showTagModal(parentId = null) {
+            currentParentId = parentId;
+            tagParentIdInput.value = parentId || '';
+            tagNameInput.value = '';
+            document.getElementById('tagDescription').value = '';
+            tagModal.show();
+            tagNameInput.focus();
+        }
+
+        // Guardar una nueva etiqueta
+        function saveTag() {
+            const name = tagNameInput.value.trim();
+            const description = document.getElementById('tagDescription').value.trim();
+            const parentId = tagParentIdInput.value || null;
+            
+            if (!name) {
+                alert('El nombre de la etiqueta es obligatorio');
+                return;
+            }
+            
+            fetch('/api/tags', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    name: name,
+                    description: description || '',
+                    parent_id: parentId
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    tagModal.hide();
+                    loadTags();
+                } else {
+                    alert(data.message || 'Error al guardar la etiqueta');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error al guardar la etiqueta');
+            });
+        }
+
+        // Eliminar una etiqueta
+        function deleteTag(tagId) {
+            fetch(`/api/tags/${tagId}`, {
+                method: 'DELETE'
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    loadTags();
+                } else {
+                    alert(data.message || 'Error al eliminar la etiqueta');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error al eliminar la etiqueta');
+            });
+        }
+
+        // Inicializar tooltips
+        function initializeTooltips() {
+            const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+            tooltipTriggerList.map(function (tooltipTriggerEl) {
+                return new bootstrap.Tooltip(tooltipTriggerEl);
+            });
+        }
+
+        // Event Listeners
+        addRootTagBtn.addEventListener('click', () => showTagModal());
+        saveTagBtn.addEventListener('click', saveTag);
+        
+        // Cargar las etiquetas al iniciar
+        loadTags();
+    });
+</script>
+{% endblock %}

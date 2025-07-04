@@ -330,16 +330,45 @@ class Alterclip:
         except:
             return ''
 
+    def get_id_by_title(self,title: str) -> int:
+        """Obtiene el id de una entrada del historial por su título
+        
+        Args:
+            title: Título de la entrada en streaming_history
+            
+        Returns:
+            int: El id de la entrada o None si no se encuentra
+        """
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            cursor.execute('SELECT id FROM streaming_history WHERE title = ?', (title,))
+            result = cursor.fetchone()
+            
+            if not result:
+                print(f"No se encontró ninguna entrada con título {title}", file=sys.stderr)
+                return None
+                
+            return result[0]
+        except Exception as e:
+            print(f"Error al obtener el id: {e}", file=sys.stderr)
+            return None
+
+
     def _save_streaming_url(self, url: str):
         """Guarda una URL de streaming en la base de datos"""
         try:
             title, platform = self._get_content_title(url)
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            cursor.execute('INSERT INTO streaming_history (url, title, platform) VALUES (?, ?, ?)', 
-                         (url, title, platform))
-            conn.commit()
-            conn.close()
+            id = self.get_id_by_title(title)
+            if id:
+                logging.info(f"URL {url} ya existe en la base de datos con id {id}")
+            else:
+                conn = sqlite3.connect(self.db_path)
+                cursor = conn.cursor()
+                cursor.execute('INSERT INTO streaming_history (url, title, platform) VALUES (?, ?, ?)', 
+                            (url, title, platform))
+                conn.commit()
+                conn.close()
         except Exception as e:
             logging.error(f"Error al guardar URL en la base de datos: {e}")
 
@@ -366,6 +395,9 @@ class Alterclip:
         hilo_udp = threading.Thread(target=self.udp_server, daemon=True)
         hilo_udp.start()
 
+        # Limpiar el portapapeles
+        pyperclip.copy("")
+
         try:
             while True:
                 try:
@@ -374,13 +406,14 @@ class Alterclip:
                     logging.warning(f"Error al leer del portapapeles: {e}")
                     continue
 
-                if text != self.prev_clipboard:
-                    modified = self.interceptar_cambiar_url(text)
-                    if modified != text:
-                        pyperclip.copy(modified)
-                        self.prev_clipboard = modified
-                    else:
-                        self.prev_clipboard = text
+                if text.strip():  # Solo procesar si hay contenido significativo
+                    if text != self.prev_clipboard:
+                        modified = self.interceptar_cambiar_url(text)
+                        if modified != text:
+                            pyperclip.copy(modified)
+                            self.prev_clipboard = modified
+                        else:
+                            self.prev_clipboard = text
 
                 time.sleep(0.2)
         except KeyboardInterrupt:

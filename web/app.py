@@ -211,9 +211,64 @@ def index():
     tags = get_tags()
     platforms = get_platforms()
     
+    # Obtener todos los tags jerárquicamente
+    def get_hierarchical_tags():
+        conn = get_connection()
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        # Obtener todos los tags
+        cursor.execute("""
+            SELECT id, name, COALESCE(description, '') as description 
+            FROM tags 
+            ORDER BY name
+        """)
+        all_tags = {row['id']: dict(row) for row in cursor.fetchall()}
+        
+        # Obtener las relaciones de jerarquía
+        cursor.execute("""
+            SELECT parent_id, child_id 
+            FROM tag_hierarchy 
+            ORDER BY parent_id, child_id
+        """)
+        
+        # Construir la jerarquía
+        hierarchy = {}
+        for parent_id, child_id in cursor.fetchall():
+            if parent_id not in hierarchy:
+                hierarchy[parent_id] = []
+            hierarchy[parent_id].append(child_id)
+        
+        # Encontrar los tags raíz (sin padres)
+        all_child_ids = {child_id for children in hierarchy.values() for child_id in children}
+        root_tag_ids = [tag_id for tag_id in all_tags if tag_id not in all_child_ids]
+        
+        # Construir la lista jerárquica
+        def build_hierarchical_list(tag_id, level=0):
+            tag = all_tags[tag_id].copy()
+            tag['level'] = level
+            result = [tag]
+            
+            if tag_id in hierarchy:
+                for child_id in hierarchy[tag_id]:
+                    result.extend(build_hierarchical_list(child_id, level + 1))
+            
+            return result
+        
+        # Construir la lista completa
+        hierarchical_tags = []
+        for root_id in root_tag_ids:
+            hierarchical_tags.extend(build_hierarchical_list(root_id))
+        
+        conn.close()
+        return hierarchical_tags
+    
+    all_tags = get_hierarchical_tags()
+    
     return render_template('index.html', 
                          history=history, 
                          tags=tags,
+                         all_tags=all_tags,
                          platforms=platforms,
                          current_search=search,
                          current_tag=tag,
@@ -280,7 +335,7 @@ def api_tag_hierarchy():
         
         # Obtener todos los tags
         cursor.execute("""
-            SELECT id, name, description 
+            SELECT id, name, COALESCE(description, '') as description 
             FROM tags
         """)
         
@@ -337,6 +392,157 @@ def api_tag_hierarchy():
         return jsonify(hierarchy)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+@app.route('/api/delete/<int:url_id>', methods=['DELETE'])
+def delete_url(url_id):
+    """Elimina una URL del historial"""
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        
+        # Eliminar las relaciones de etiquetas primero
+        cursor.execute("DELETE FROM url_tags WHERE url_id = ?", (url_id,))
+        
+        # Luego eliminar la URL del historial
+        cursor.execute("DELETE FROM streaming_history WHERE id = ?", (url_id,))
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({"status": "success", "message": "URL eliminada correctamente"}), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@app.route('/manage-tags')
+def manage_tags():
+    """Página de gestión de etiquetas"""
+    return render_template('manage_tags.html')
+
+@app.route('/api/tags', methods=['POST'])
+def create_tag():
+    """Crea una nueva etiqueta"""
+    try:
+        data = request.get_json()
+        name = data.get('name')
+        parent_id = data.get('parent_id')
+        
+        if not name:
+            return jsonify({"status": "error", "message": "El nombre de la etiqueta es obligatorio"}), 400
+            
+        conn = get_connection()
+        cursor = conn.cursor()
+        
+        # Verificar si la etiqueta ya existe
+        cursor.execute("SELECT id FROM tags WHERE name = ?", (name,))
+        if cursor.fetchone():
+            conn.close()
+            return jsonify({"status": "error", "message": "Ya existe una etiqueta con ese nombre"}), 400
+        
+        # Insertar la nueva etiqueta
+        cursor.execute("INSERT INTO tags (name, description) VALUES (?, ?)", 
+                     (name, data.get('description', '')))
+        tag_id = cursor.lastrowid
+        
+        # Si tiene padre, crear la relación de jerarquía
+        if parent_id:
+            cursor.execute("INSERT INTO tag_hierarchy (parent_id, child_id) VALUES (?, ?)", 
+                         (parent_id, tag_id))
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({
+            "status": "success", 
+            "message": "Etiqueta creada correctamente",
+            "tag": {"id": tag_id, "name": name}
+        }), 201
+        
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@app.route('/api/tags/<int:tag_id>', methods=['DELETE'])
+def delete_tag(tag_id):
+    """Elimina una etiqueta"""
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        
+        # Verificar si la etiqueta tiene hijos
+        cursor.execute("SELECT COUNT(*) FROM tag_hierarchy WHERE parent_id = ?", (tag_id,))
+        if cursor.fetchone()[0] > 0:
+            return jsonify({
+                "status": "error", 
+                "message": "No se puede eliminar una etiqueta que tiene etiquetas hijas"
+            }), 400
+        
+        # Verificar si la etiqueta está en uso
+        cursor.execute("SELECT COUNT(*) FROM url_tags WHERE tag_id = ?", (tag_id,))
+        if cursor.fetchone()[0] > 0:
+            return jsonify({
+                "status": "error", 
+                "message": "No se puede eliminar una etiqueta que está en uso"
+            }), 400
+        
+        # Eliminar relaciones de jerarquía
+        cursor.execute("DELETE FROM tag_hierarchy WHERE child_id = ?", (tag_id,))
+        
+        # Eliminar la etiqueta
+        cursor.execute("DELETE FROM tags WHERE id = ?", (tag_id,))
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({"status": "success", "message": "Etiqueta eliminada correctamente"}), 200
+        
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@app.route('/api/urls/<int:url_id>/tags', methods=['POST'])
+def add_tag_to_url(url_id):
+    """Añade una etiqueta existente a una URL"""
+    try:
+        data = request.get_json()
+        tag_id = data.get('tag_id')
+        
+        if not tag_id:
+            return jsonify({"status": "error", "message": "Se requiere el ID de la etiqueta"}), 400
+            
+        conn = get_connection()
+        cursor = conn.cursor()
+        
+        # Verificar si la URL existe
+        cursor.execute("SELECT id FROM streaming_history WHERE id = ?", (url_id,))
+        if not cursor.fetchone():
+            return jsonify({"status": "error", "message": "URL no encontrada"}), 404
+            
+        # Verificar si la etiqueta existe
+        cursor.execute("SELECT id FROM tags WHERE id = ?", (tag_id,))
+        if not cursor.fetchone():
+            return jsonify({"status": "error", "message": "Etiqueta no encontrada"}), 404
+            
+        # Verificar si la etiqueta ya está asignada
+        cursor.execute("SELECT 1 FROM url_tags WHERE url_id = ? AND tag_id = ?", (url_id, tag_id))
+        if cursor.fetchone():
+            return jsonify({"status": "error", "message": "La etiqueta ya está asignada a esta URL"}), 400
+            
+        # Asignar la etiqueta a la URL
+        cursor.execute("INSERT INTO url_tags (url_id, tag_id) VALUES (?, ?)", (url_id, tag_id))
+        
+        # Obtener información de la etiqueta para la respuesta
+        cursor.execute("SELECT name FROM tags WHERE id = ?", (tag_id,))
+        tag_name = cursor.fetchone()[0]
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({
+            "status": "success", 
+            "message": "Etiqueta asignada correctamente",
+            "tag": {"id": tag_id, "name": tag_name}
+        }), 201
+        
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)

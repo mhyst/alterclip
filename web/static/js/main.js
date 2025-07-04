@@ -223,6 +223,44 @@ document.addEventListener('DOMContentLoaded', function() {
         return null;
     }
 
+    // Manejar el botón de eliminar
+    document.querySelectorAll('.delete-btn').forEach(button => {
+        button.addEventListener('click', function(e) {
+            e.stopPropagation();
+            
+            const urlId = this.getAttribute('data-id');
+            if (!urlId) return;
+            
+            if (confirm('¿Estás seguro de que quieres eliminar este elemento del historial?')) {
+                fetch(`/api/delete/${urlId}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        // Eliminar la fila de la tabla
+                        const row = this.closest('tr');
+                        if (row) {
+                            row.style.transition = 'opacity 0.5s';
+                            row.style.opacity = '0';
+                            setTimeout(() => row.remove(), 500);
+                        }
+                        showToast('Elemento eliminado correctamente', 'success');
+                    } else {
+                        showToast('Error al eliminar el elemento', 'danger');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    showToast('Error al eliminar el elemento', 'danger');
+                });
+            }
+        });
+    });
+
     // Manejar el botón de copiar al portapapeles
     document.querySelectorAll('.copy-btn').forEach(button => {
         button.addEventListener('click', function(e) {
