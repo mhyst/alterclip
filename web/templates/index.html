@@ -81,10 +81,22 @@
                                         <td>
                                             {% if item.tags %}
                                                 <div class="d-flex flex-wrap gap-1">
-                                                    {% for tag in item.tags %}
-                                                        <a href="{{ url_for('index', tag=tag) }}" class="badge bg-secondary text-decoration-none">
-                                                            {{ tag }}
-                                                        </a>
+                                                    {% for tag_info in item.tags %}
+                                                        {% set tag_name = tag_info.name if tag_info is mapping else tag_info %}
+                                                        {% set tag_id = tag_info.id if tag_info is mapping else none %}
+                                                        <div class="tag-badge d-flex align-items-center bg-secondary rounded-pill" style="position: relative; padding-right: 1.5rem;">
+                                                            <a href="{{ url_for('index', tag=tag_name) }}" class="text-decoration-none text-white px-2 py-1">
+                                                                {{ tag_name }}
+                                                            </a>
+                                                            <button class="btn btn-sm p-0 remove-tag" 
+                                                                    data-url-id="{{ item.id }}" 
+                                                                    data-tag-id="{{ tag_id }}"
+                                                                    data-tag-name="{{ tag_name|urlencode }}"
+                                                                    style="position: absolute; right: 0; top: 0; bottom: 0; width: 1.5rem; background: none; border: none; color: white; cursor: pointer; display: flex; align-items: center; justify-content: center;"
+                                                                    {% if not tag_id %}disabled title="No se puede eliminar (falta ID)"{% endif %}>
+                                                                <i class="bi bi-x" style="font-size: 0.9rem; line-height: 1;"></i>
+                                                            </button>
+                                                        </div>
                                                     {% endfor %}
                                                 </div>
                                             {% else %}
@@ -115,6 +127,11 @@
                                                         data-bs-placement="top" 
                                                         title="Añadir etiqueta">
                                                     <i class="bi bi-tag"></i>
+                                                </button>
+                                                <button class="btn btn-outline-warning mark-unseen-btn" 
+                                                        data-id="{{ item.id }}"
+                                                        data-bs-toggle="tooltip" data-bs-placement="top" title="Marcar como no visto">
+                                                    <i class="bi bi-eye-slash"></i>
                                                 </button>
                                                 <button class="btn btn-outline-danger delete-btn" 
                                                         data-id="{{ item.id }}"
@@ -157,11 +174,14 @@
             <div class="modal-body">
                 <input type="hidden" id="currentUrlId">
                 <div class="mb-3">
+                    <label for="tagSearch" class="form-label">Buscar etiqueta</label>
+                    <input type="text" class="form-control mb-2" id="tagSearch" placeholder="Escribe para buscar...">
+                    
                     <label for="tagSelect" class="form-label">Seleccionar etiqueta</label>
-                    <select class="form-select" id="tagSelect">
+                    <select class="form-select" id="tagSelect" size="8" style="min-height: 150px;">
                         <option value="" selected disabled>Selecciona una etiqueta...</option>
                         {% for tag in all_tags %}
-                            <option value="{{ tag.id }}" data-level="{{ tag.level }}">
+                            <option value="{{ tag.id }}" data-level="{{ tag.level }}" data-search="{{ tag.name|lower }} {% if tag.description %}{{ tag.description|lower }}{% endif %}">
                                 {% if tag.level > 0 %}{% for i in range(tag.level) %}&nbsp;&nbsp;&nbsp;{% endfor %}↳ {% endif %}{{ tag.name }}
                                 {% if tag.description %}<span class="text-muted"> - {{ tag.description }}</span>{% endif %}
                             </option>
@@ -187,10 +207,83 @@
 <script>
     // Variables globales
     let currentTagModal = null;
+    
+    // Función para marcar como no visto
+    function markAsUnseen(urlId, buttonElement) {
+        if (!urlId) return false;
+        
+        fetch(`/api/mark_as_unseen/${urlId}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                // Actualizar la interfaz
+                const row = buttonElement.closest('tr');
+                if (row) {
+                    row.classList.add('table-warning');
+                    
+                    // Añadir el badge de "Nuevo" si no existe
+                    if (!row.querySelector('.badge.bg-warning')) {
+                        const titleLink = row.querySelector('a[data-url-id]');
+                        if (titleLink) {
+                            const badge = document.createElement('span');
+                            badge.className = 'badge bg-warning text-dark ms-2';
+                            badge.textContent = 'Nuevo';
+                            titleLink.appendChild(badge);
+                        }
+                    }
+                    
+                    // Mostrar notificación de éxito
+                    showToast('El contenido se ha marcado como no visto', 'success');
+                }
+            }
+        })
+        .catch(error => {
+            console.error('Error al marcar como no visto:', error);
+            showToast('Error al marcar como no visto', 'danger');
+        });
+    }
+    
+    // Función para filtrar etiquetas en el select
+    function filterTags() {
+        const searchTerm = document.getElementById('tagSearch').value.toLowerCase();
+        const options = document.querySelectorAll('#tagSelect option');
+        
+        options.forEach(option => {
+            if (option.value === '') return; // No ocultar la opción por defecto
+            
+            const searchText = option.getAttribute('data-search') || '';
+            if (searchText.includes(searchTerm) || searchTerm === '') {
+                option.style.display = '';
+            } else {
+                option.style.display = 'none';
+            }
+        });
+        
+        // Seleccionar la primera opción visible que no esté deshabilitada
+        const firstVisible = Array.from(options).find(opt => 
+            opt.style.display !== 'none' && !opt.disabled && opt.value !== ''
+        );
+        
+        if (firstVisible) {
+            firstVisible.selected = true;
+        } else {
+            // Si no hay coincidencias, seleccionar la opción por defecto
+            const defaultOption = document.querySelector('#tagSelect option[value=""]');
+            if (defaultOption) defaultOption.selected = true;
+        }
+    }
 
     // Inicializar el modal
     document.addEventListener('DOMContentLoaded', function() {
         currentTagModal = new bootstrap.Modal(document.getElementById('addTagModal'));
+        
+        // Configurar el evento de búsqueda
+        document.getElementById('tagSearch').addEventListener('input', filterTags);
         
         // Manejar clic en el botón de añadir etiqueta
         document.querySelectorAll('.add-tag-btn').forEach(btn => {
@@ -198,8 +291,86 @@
                 const urlId = this.getAttribute('data-id');
                 document.getElementById('currentUrlId').value = urlId;
                 document.getElementById('tagSelect').value = '';
+                document.getElementById('tagSearch').value = ''; // Limpiar búsqueda al abrir el modal
                 currentTagModal.show();
             });
+        });
+        
+        // Manejar la eliminación de etiquetas
+        document.addEventListener('click', async function(e) {
+            const removeBtn = e.target.closest('.remove-tag');
+            
+            if (!removeBtn || removeBtn.disabled) return;
+            
+            e.preventDefault();
+            e.stopPropagation();
+            
+            const urlId = removeBtn.getAttribute('data-url-id');
+            const tagId = removeBtn.getAttribute('data-tag-id');
+            const tagName = decodeURIComponent(removeBtn.getAttribute('data-tag-name') || '');
+            const tagBadge = removeBtn.closest('.tag-badge');
+            
+            if (!urlId || !tagId) {
+                console.error('Faltan datos requeridos:', { urlId, tagId });
+                showToast('error', 'Error', 'Datos insuficientes para eliminar la etiqueta');
+                return;
+            }
+            
+            if (!confirm(`¿Eliminar la etiqueta "${tagName}" de este elemento?`)) {
+                return;
+            }
+            
+            console.log('Iniciando eliminación de etiqueta:', { urlId, tagId, tagName });
+            
+            // Mostrar indicador de carga
+            const originalHtml = removeBtn.innerHTML;
+            removeBtn.disabled = true;
+            removeBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>';
+            
+            try {
+                // Hacer la petición DELETE directamente con el ID de la etiqueta
+                const response = await fetch(`/api/urls/${urlId}/tags/${tagId}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json',
+                    },
+                });
+                
+                console.log('Respuesta de eliminación:', response);
+                
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({}));
+                    throw new Error(errorData.message || 'Error al eliminar la etiqueta');
+                }
+                
+                const data = await response.json();
+                console.log('Etiqueta eliminada:', data);
+                
+                // Eliminar el badge de la etiqueta del DOM
+                if (tagBadge && tagBadge.parentNode) {
+                    tagBadge.remove();
+                    
+                    // Mostrar notificación de éxito
+                    showToast('success', 'Éxito', `La etiqueta se ha eliminado correctamente`);
+                    
+                    // Si no quedan etiquetas, mostrar "Sin etiquetas"
+                    const tagsContainer = tagBadge.parentElement;
+                    if (tagsContainer && tagsContainer.children.length === 0) {
+                        const noTagsSpan = document.createElement('span');
+                        noTagsSpan.className = 'text-muted';
+                        noTagsSpan.textContent = 'Sin etiquetas';
+                        tagsContainer.appendChild(noTagsSpan);
+                    }
+                }
+            } catch (error) {
+                console.error('Error al eliminar la etiqueta:', error);
+                showToast('error', 'Error', error.message || 'Ocurrió un error al eliminar la etiqueta');
+                
+                // Restaurar el botón en caso de error
+                removeBtn.disabled = false;
+                removeBtn.innerHTML = originalHtml;
+            }
         });
         
         // Manejar el guardado de la etiqueta
@@ -282,6 +453,11 @@
         var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
         var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
             return new bootstrap.Tooltip(tooltipTriggerEl);
+        });
+        
+        // Asegurar que los botones de eliminar etiqueta sean accesibles
+        document.querySelectorAll('.remove-tag').forEach(btn => {
+            btn.style.pointerEvents = 'auto';
         });
     });
 </script>

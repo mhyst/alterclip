@@ -6,6 +6,7 @@ from pathlib import Path
 import unicodedata
 from datetime import datetime
 from platformdirs import user_log_dir
+from urllib.parse import unquote  # Para decodificar URLs
 
 app = Flask(__name__)
 
@@ -119,7 +120,7 @@ def get_streaming_history(limit=50, search=None, tag=None, platform=None):
     
     # Obtenemos todas las etiquetas para las URLs seleccionadas
     cursor.execute(f"""
-        SELECT ut.url_id, t.name
+        SELECT ut.url_id, t.id, t.name
         FROM url_tags ut
         JOIN tags t ON ut.tag_id = t.id
         WHERE ut.url_id IN ({placeholders})
@@ -127,10 +128,10 @@ def get_streaming_history(limit=50, search=None, tag=None, platform=None):
     
     # Asignamos las etiquetas a cada URL
     url_tags = {}
-    for url_id, tag_name in cursor.fetchall():
+    for url_id, tag_id, tag_name in cursor.fetchall():
         if url_id not in url_tags:
             url_tags[url_id] = []
-        url_tags[url_id].append(tag_name)
+        url_tags[url_id].append({"id": tag_id, "name": tag_name})
     
     # Actualizamos los resultados con las etiquetas
     for result in results:
@@ -542,6 +543,139 @@ def add_tag_to_url(url_id):
         }), 201
         
     except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@app.route('/api/mark_as_unseen/<int:url_id>', methods=['POST'])
+def mark_as_unseen(url_id):
+    """Marca una URL como no vista"""
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        
+        # Establecer el contador de visto a 0
+        cursor.execute("""
+            UPDATE streaming_history 
+            SET visto = 0 
+            WHERE id = ?
+        """, (url_id,))
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({"status": "success", "message": "Marcado como no visto"}), 200
+    except Exception as e:
+        print(f"Error al marcar como no visto: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@app.route('/api/tags')
+def get_tags_by_name():
+    """Obtiene etiquetas por nombre (búsqueda)"""
+    try:
+        # Obtener y decodificar el parámetro 'name' de la URL
+        name_encoded = request.args.get('name', '').strip()
+        if not name_encoded:
+            return jsonify({"status": "error", "message": "Se requiere el parámetro 'name'"}), 400
+            
+        # Decodificar el nombre de la etiqueta (maneja espacios y caracteres especiales)
+        name = unquote(name_encoded)
+        
+        conn = get_connection()
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        # Obtener todas las etiquetas para depuración
+        cursor.execute("SELECT id, name FROM tags ORDER BY name")
+        all_tags = [dict(row) for row in cursor.fetchall()]
+        
+        # Primero intentar búsqueda exacta
+        cursor.execute("""
+            SELECT id, name, description 
+            FROM tags 
+            WHERE LOWER(name) = LOWER(?)
+            ORDER BY name
+        """, (name,))
+        
+        exact_matches = [dict(row) for row in cursor.fetchall()]
+        
+        # Si no se encontraron resultados, intentar con búsqueda más flexible
+        if not exact_matches:
+            cursor.execute("""
+                SELECT id, name, description 
+                FROM tags 
+                WHERE LOWER(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(
+                    name, 'á', 'a'), 'é', 'e'), 'í', 'i'), 'ó', 'o'), 'ú', 'u')) 
+                LIKE LOWER(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(
+                    ?, 'á', 'a'), 'é', 'e'), 'í', 'i'), 'ó', 'o'), 'ú', 'u'))
+                ORDER BY name
+            """, (f"%{name}%",))
+            
+            flexible_matches = [dict(row) for row in cursor.fetchall()]
+        else:
+            flexible_matches = []
+        
+        conn.close()
+        
+        # Combinar resultados (primero coincidencias exactas, luego flexibles)
+        tags = exact_matches + flexible_matches
+        
+        # Depuración adicional
+        debug_info = {
+            "received_name": name_encoded,
+            "decoded_name": name,
+            "all_tags_in_db": all_tags,
+            "exact_matches_count": len(exact_matches),
+            "flexible_matches_count": len(flexible_matches),
+            "exact_query": f"SELECT id, name FROM tags WHERE LOWER(name) = LOWER('{name}')",
+            "flexible_query": f"SELECT id, name FROM tags WHERE LOWER(REPLACE(...)) LIKE LOWER('%{name}%')"
+        }
+        
+        return jsonify({
+            "status": "success",
+            "tags": tags,
+            "debug": debug_info
+        }), 200
+        
+    except Exception as e:
+        print(f"Error al buscar etiquetas: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@app.route('/api/urls/<int:url_id>/tags/<int:tag_id>', methods=['DELETE'])
+def remove_tag_from_url(url_id, tag_id):
+    """Elimina una etiqueta de una URL"""
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        
+        # Verificar si la relación existe
+        cursor.execute("""
+            SELECT 1 FROM url_tags 
+            WHERE url_id = ? AND tag_id = ?
+        """, (url_id, tag_id))
+        
+        if not cursor.fetchone():
+            return jsonify({"status": "error", "message": "La etiqueta no está asignada a esta URL"}), 404
+        
+        # Eliminar la relación
+        cursor.execute("""
+            DELETE FROM url_tags 
+            WHERE url_id = ? AND tag_id = ?
+        """, (url_id, tag_id))
+        
+        # Obtener el nombre de la etiqueta para la respuesta
+        cursor.execute("SELECT name FROM tags WHERE id = ?", (tag_id,))
+        tag_name = cursor.fetchone()[0]
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({
+            "status": "success", 
+            "message": "Etiqueta eliminada correctamente",
+            "tag": {"id": tag_id, "name": tag_name}
+        }), 200
+        
+    except Exception as e:
+        print(f"Error al eliminar etiqueta: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
 
 if __name__ == '__main__':
