@@ -346,7 +346,7 @@ class Alterclip:
             result = cursor.fetchone()
             
             if not result:
-                print(f"No se encontró ninguna entrada con url {url}", file=sys.stderr)
+                #print(f"No se encontró ninguna entrada con url {url}", file=sys.stderr)
                 return None
                 
             return result[0]
