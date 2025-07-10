@@ -331,10 +331,10 @@ class Alterclip:
             return ''
 
     def get_id_by_url(self,url: str) -> int:
-        """Obtiene el id de una entrada del historial por su título
+        """Obtiene el id de una entrada del historial por su url
         
         Args:
-            title: Título de la entrada en streaming_history
+            url: URL de la entrada en streaming_history
             
         Returns:
             int: El id de la entrada o None si no se encuentra
