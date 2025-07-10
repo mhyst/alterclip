@@ -549,8 +549,16 @@ def add_tag_to_url(url_id):
 def mark_as_unseen(url_id):
     """Marca una URL como no vista"""
     try:
+        print(f"Intentando marcar URL {url_id} como no vista")
         conn = get_connection()
         cursor = conn.cursor()
+        
+        # Verificar si la URL existe primero
+        cursor.execute("SELECT id FROM streaming_history WHERE id = ?", (url_id,))
+        if not cursor.fetchone():
+            conn.close()
+            print(f"Error: URL con ID {url_id} no encontrada")
+            return jsonify({"status": "error", "message": "URL no encontrada"}), 404
         
         # Establecer el contador de visto a 0
         cursor.execute("""
@@ -559,13 +567,21 @@ def mark_as_unseen(url_id):
             WHERE id = ?
         """, (url_id,))
         
+        # Verificar si se actualizó alguna fila
+        if cursor.rowcount == 0:
+            conn.close()
+            print(f"Error: No se pudo actualizar la URL con ID {url_id}")
+            return jsonify({"status": "error", "message": "No se pudo actualizar la URL"}), 500
+        
         conn.commit()
         conn.close()
         
+        print(f"URL {url_id} marcada como no vista correctamente")
         return jsonify({"status": "success", "message": "Marcado como no visto"}), 200
     except Exception as e:
-        print(f"Error al marcar como no visto: {e}")
-        return jsonify({"status": "error", "message": str(e)}), 500
+        error_msg = f"Error al marcar como no visto: {str(e)}"
+        print(error_msg)
+        return jsonify({"status": "error", "message": error_msg}), 500
 
 @app.route('/api/tags')
 def get_tags_by_name():

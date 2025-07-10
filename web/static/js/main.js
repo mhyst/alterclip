@@ -261,22 +261,51 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
-    // Manejar el botón de copiar al portapapeles
+    // Manejar el botón de copiar al portapapeles usando método compatible con HTTP
     document.querySelectorAll('.copy-btn').forEach(button => {
         button.addEventListener('click', function(e) {
-            e.stopPropagation(); // Evitar que el evento se propague al enlace
-            const url = this.getAttribute('data-url');
-            navigator.clipboard.writeText(url).then(() => {
-                // Cambiar el icono temporalmente para indicar éxito
-                const icon = this.querySelector('i');
-                const originalClass = icon.className;
-                icon.className = 'bi bi-check';
-                
-                // Restaurar el icono después de 2 segundos
-                setTimeout(() => {
-                    icon.className = originalClass;
-                }, 2000);
-            });
+            e.preventDefault();
+            e.stopPropagation();
+            
+            let url = this.getAttribute('data-url');
+            
+            // Usar el método compatible con HTTP
+            const textArea = document.createElement('textarea');
+            textArea.value = url;
+            textArea.style.position = 'fixed';
+            textArea.style.left = '0';
+            textArea.style.top = '0';
+            textArea.style.opacity = '0';
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            
+            try {
+                const successful = document.execCommand('copy');
+                if (successful) {
+                    // Cambiar el icono temporalmente para indicar éxito
+                    const icon = this.querySelector('i');
+                    if (icon) {
+                        const originalClass = icon.className;
+                        icon.className = 'bi bi-check';
+                        
+                        // Mostrar notificación
+                        showToast('URL copiada al portapapeles', 'success');
+                        
+                        // Restaurar el icono después de 2 segundos
+                        setTimeout(() => {
+                            icon.className = originalClass;
+                        }, 2000);
+                    }
+                } else {
+                    throw new Error('No se pudo copiar al portapapeles');
+                }
+            } catch (err) {
+                console.error('Error al copiar al portapapeles:', err);
+                showToast('Error al copiar la URL', 'danger');
+            } finally {
+                document.body.removeChild(textArea);
+            }
         });
     });
     

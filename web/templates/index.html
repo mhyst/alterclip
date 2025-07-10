@@ -112,8 +112,13 @@
                                         </td>
                                         <td>
                                             <div class="btn-group btn-group-sm" role="group">
-                                                <a href="{{ item.url }}" target="_blank" class="btn btn-outline-primary" 
-                                                   data-bs-toggle="tooltip" data-bs-placement="top" title="Abrir enlace">
+                                                <a href="{{ item.url }}" 
+                                                   class="btn btn-outline-primary" 
+                                                   data-bs-toggle="tooltip" 
+                                                   data-bs-placement="top" 
+                                                   title="Abrir enlace"
+                                                   target="_blank"
+                                                   onclick="markAsViewedAndOpen('{{ item.id }}', this.href, event);">
                                                     <i class="bi bi-box-arrow-up-right"></i>
                                                 </a>
                                                 <button class="btn btn-outline-secondary copy-btn" 
@@ -207,6 +212,49 @@
 <script>
     // Variables globales
     let currentTagModal = null;
+    
+    // Función para marcar como visto y abrir la URL
+    function markAsViewedAndOpen(urlId, url, event) {
+        // Prevenir el comportamiento por defecto para manejar nosotros la navegación
+        event.preventDefault();
+        
+        // Marcar como visto
+        fetch(`/api/mark_as_viewed/${urlId}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                // Actualizar la interfaz
+                const linkElement = event.target.closest('a');
+                if (linkElement) {
+                    const row = linkElement.closest('tr');
+                    if (row) {
+                        row.classList.remove('table-warning');
+                        
+                        // Buscar el badge "Nuevo" en el título, no en el botón
+                        const titleLink = row.querySelector('a[data-url-id]');
+                        if (titleLink) {
+                            const badge = titleLink.querySelector('.badge.bg-warning');
+                            if (badge) {
+                                badge.remove();
+                            }
+                        }
+                    }
+                }
+            }
+            // Abrir la URL en una nueva pestaña
+            window.open(url, '_blank');
+        })
+        .catch(error => {
+            console.error('Error al marcar como visto:', error);
+            // Abrir la URL de todos modos
+            window.open(url, '_blank');
+        });
+    }
     
     // Función para marcar como no visto
     function markAsUnseen(urlId, buttonElement) {
@@ -430,22 +478,75 @@
         window.location.href = '{{ url_for("index") }}?' + params.toString();
     });
     
-    // Manejar el botón de copiar al portapapeles
-    document.querySelectorAll('.copy-btn').forEach(button => {
-        button.addEventListener('click', function() {
-            const url = this.getAttribute('data-url');
-            navigator.clipboard.writeText(url).then(() => {
+    // Función para manejar la copia al portapapeles
+    function handleCopyClick(event) {
+        event.preventDefault();
+        event.stopPropagation();
+        
+        const button = event.currentTarget;
+        let url = button.getAttribute('data-url');
+        
+        console.log('URL original:', url);
+        
+        // Añadir el prefijo 'share.only/' al principio de la URL completa si no lo tiene ya
+        if (url && !url.startsWith('share.only/')) {
+            // Añadir 'share.only/' al principio de la URL completa
+            url = `share.only/${url}`;
+        }
+        
+        console.log('URL modificada:', url);
+        
+        // Usar el método compatible con HTTP
+        const textArea = document.createElement('textarea');
+        textArea.value = url;
+        textArea.style.position = 'fixed';  // Fuera de la pantalla
+        textArea.style.left = '0';
+        textArea.style.top = '0';
+        textArea.style.opacity = '0';
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        
+        try {
+            const successful = document.execCommand('copy');
+            if (successful) {
+                console.log('URL copiada al portapapeles');
                 // Cambiar el icono temporalmente para indicar éxito
-                const icon = this.querySelector('i');
-                const originalClass = icon.className;
-                icon.className = 'bi bi-check';
-                
-                // Restaurar el icono después de 2 segundos
-                setTimeout(() => {
-                    icon.className = originalClass;
-                }, 2000);
-            });
+                const icon = button.querySelector('i');
+                if (icon) {
+                    const originalClass = icon.className;
+                    icon.className = 'bi bi-check';
+                    
+                    // Restaurar el icono después de 2 segundos
+                    setTimeout(() => {
+                        icon.className = originalClass;
+                    }, 2000);
+                }
+                showToast('URL copiada al portapapeles', 'success');
+            } else {
+                throw new Error('No se pudo copiar al portapapeles');
+            }
+        } catch (err) {
+            console.error('Error al copiar al portapapeles:', err);
+            showToast('Error al copiar la URL', 'danger');
+        } finally {
+            document.body.removeChild(textArea);
+        }
+    }
+    
+    // Asignar manejador de eventos a los botones de copiar existentes
+    document.addEventListener('DOMContentLoaded', function() {
+        document.querySelectorAll('.copy-btn').forEach(button => {
+            button.addEventListener('click', handleCopyClick);
         });
+    });
+    
+    // También manejar clics en elementos añadidos dinámicamente
+    document.addEventListener('click', function(event) {
+        const copyButton = event.target.closest('.copy-btn');
+        if (copyButton) {
+            handleCopyClick(event);
+        }
     });
     
     // Inicializar tooltips
@@ -458,6 +559,18 @@
         // Asegurar que los botones de eliminar etiqueta sean accesibles
         document.querySelectorAll('.remove-tag').forEach(btn => {
             btn.style.pointerEvents = 'auto';
+        });
+        
+        // Manejar clic en el botón de marcar como no visto
+        document.addEventListener('click', function(e) {
+            const markUnseenBtn = e.target.closest('.mark-unseen-btn');
+            if (markUnseenBtn) {
+                e.preventDefault();
+                const urlId = markUnseenBtn.getAttribute('data-id');
+                if (urlId) {
+                    markAsUnseen(urlId, markUnseenBtn);
+                }
+            }
         });
     });
 </script>
