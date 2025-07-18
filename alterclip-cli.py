@@ -588,7 +588,9 @@ def udp_client(mensaje: str):
 
 def toggle_mode() -> None:
     udp_client("toggle")
-   
+
+def status_mode() -> None:
+    udp_client("status")
 
 def show_help() -> None:
     """Muestra información detallada sobre el uso de alterclip-cli"""
@@ -1252,6 +1254,8 @@ def main() -> None:
     parser_search.set_defaults(command='search')
     
     parser_toggle = subparsers.add_parser('toggle', help='Alterna entre modo normal y modo alterclip')
+
+    parser_status = subparsers.add_parser('status', help='Consulta el estado del demonio')
     
     parser_hist = subparsers.add_parser('hist', help='Muestra el historial de URLs')
     parser_hist.add_argument('--limit', type=int, help='Número de entradas a mostrar')
@@ -1347,6 +1351,8 @@ def main() -> None:
             show_streaming_history(search=args.term, visto=args.visto, platform=args.platform, since=args.since)
         elif args.command == 'toggle':
             toggle_mode()
+        elif args.command == 'status':
+            status_mode()
         elif args.command == 'hist':
             show_streaming_history(
                 limit=args.limit,

@@ -167,18 +167,25 @@ class Alterclip:
         return cadena
 
     def udp_server(self):
+        estados = {
+            MODO_STREAMING: "Estado: Streaming",
+            MODO_OFFLINE: "Estado: Offline"
+        }
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as server_socket:
             server_socket.bind(('0.0.0.0', UDP_PORT))
             while True:
                 data, addr = server_socket.recvfrom(1024)
                 mensaje = data.decode()
                 logging.info(f"Mensaje de {addr}: {mensaje}")
-                if self.modo == MODO_OFFLINE:
-                    self.modo = MODO_STREAMING
-                    respuesta = "Modo streaming"
+                if mensaje.lower() == "status":
+                    respuesta = estados.get(self.modo, "Desconocido")
                 else:
-                    self.modo = MODO_OFFLINE
-                    respuesta = "Modo offline"
+                    if self.modo == MODO_OFFLINE:
+                        self.modo = MODO_STREAMING
+                        respuesta = "Modo streaming"
+                    else:
+                        self.modo = MODO_OFFLINE
+                        respuesta = "Modo offline"
                 logging.info(f"Respuesta enviada: {respuesta}")
                 server_socket.sendto(respuesta.encode(), addr)
 
