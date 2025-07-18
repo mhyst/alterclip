@@ -49,7 +49,7 @@ class Alterclip:
         self.db_path = Path(user_log_dir("alterclip")) / "streaming_history.db"
         self._initialize_db()
         
-        self.modo = MODO_STREAMING
+        self.modo = MODO_OFFLINE
         self.prev_clipboard = ""
         self.reemplazos = {
             "x.com": "fixupx.com",
