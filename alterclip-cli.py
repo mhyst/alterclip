@@ -644,6 +644,11 @@ alterclip-cli - Interfaz de línea de comandos para alterclip
 """, 'white'))
     
     print(colored("""
+    status
+        Muestra el estado actual del demonio
+""", 'white'))
+    
+    print(colored("""
     search [TÉRMINO] [--platform [PLATAFORMA]]
         Busca URLs en el historial por título
         TÉRMINO: Término de búsqueda
@@ -1202,6 +1207,7 @@ def main() -> None:
       rm [ID]            Elimina una URL del historial
       search [TÉRMINO]   Busca URLs en el historial
       toggle             Alterna entre modo normal y modo alterclip
+      status             Muestra el estado actual del demonio
       hist               Muestra el historial de URLs
       hist --no-tags     Muestra solo URLs sin tags
       playall            Reproduce múltiples URLs en secuencia
@@ -1216,7 +1222,7 @@ def main() -> None:
       tag list             Lista todos los tags
       tag hierarchy        Muestra la jerarquía completa de tags
       tag update [NOMBRE]  Actualiza un tag
-      tag auto [ID]        Asigna automáticamente etiquetas con IA
+      tag auto [ID]        Asigna automáticamente etiquetas a una URL usando IA
       tag url add [ID] [TAG]   Asocia un tag con una URL
       tag url rm [ID] [TAG]   Elimina la asociación entre una URL y un tag
     '''

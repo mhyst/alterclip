@@ -166,6 +166,9 @@ Ejemplos de uso:
 # Eliminar el vídeo con ID 123
 ./alterclip-cli rm 123
 
+# Consultar el estado del demonio
+./alterclip-cli status
+
 # Cambiar el modo de alterclip
 ./alterclip-cli toggle
 
