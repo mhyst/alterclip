@@ -49,17 +49,6 @@ def create_connection() -> sqlite3.Connection:
     #Añadimos la función remove_accents para que pueda ser usada en las consultas
     conn.create_function("remove_accents", 1, remove_accents)
 
-    #Vamos a realizar migración para añadir la nueva columna "visto" a streaming_history
-    cursor = conn.cursor()
-
-    # Comprobar si ya existe la columna 'visto'
-    cursor.execute("PRAGMA table_info(streaming_history);")
-    columnas = [fila[1] for fila in cursor.fetchall()]
-
-    if 'visto' not in columnas:
-        cursor.execute("ALTER TABLE streaming_history ADD COLUMN visto INTEGER DEFAULT 0;")
-
-    conn.commit()
     return conn
 
 def get_db_connection() -> sqlite3.Connection:
