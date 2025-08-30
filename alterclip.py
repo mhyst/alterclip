@@ -65,6 +65,16 @@ class Alterclip:
             "archive.org"
         ]
 
+    def resolve_share_google(self, url: str) -> str:
+        """
+        Dada una URL de share.google, sigue las redirecciones y devuelve la URL final.
+        """
+        try:
+            response = requests.get(url, allow_redirects=True, timeout=10)
+            return response.url  # la URL final tras seguir todas las redirecciones
+        except requests.RequestException as e:
+            raise RuntimeError(f"Error resolviendo la URL: {e}")
+
     def handler_streaming(self, signum, frame):
         self.modo = MODO_STREAMING
         logging.info("\u00a1Se\u00f1al STREAMING recibida! Cambiando a modo STREAMING.")
@@ -149,6 +159,9 @@ class Alterclip:
         # Si es una URL con prefijo share.only/, devolver la URL sin el prefijo
         if cadena.startswith('share.only/'):  # Prefijo para URLs de copia
             return cadena[11:]  # Eliminamos el prefijo share.only/
+
+        if cadena.startswith('https://share.google'):
+            return self.resolve_share_google(cadena)
 
         # Si es una URL de streaming, la guardamos en la base de datos
         if self.es_streaming_compatible(cadena):
