@@ -33,7 +33,7 @@ from typing import Optional
 import shlex
 import requests
 import re
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import urlparse, urlunparse, parse_qs
 
 # Constantes
 REPRODUCTOR_VIDEO = os.getenv("ALTERCLIP_PLAYER", "mpv")
@@ -56,7 +56,8 @@ class Alterclip:
             "tiktok.com": "tfxktok.com",
             "twitter.com": "fixupx.com",
             "pornhub.com": "pxrnhub.com",
-            "nhentai.net": "nhentaix.net"
+            "nhentai.net": "nhentaix.net",
+            "actualidad.rt.com": "esrt.space"
         }
         self.streaming_sources = [
             "instagram.com",
@@ -173,9 +174,15 @@ class Alterclip:
                 return cadena
 
         # Si no es streaming ni de copia, aplicamos los reemplazos normales
-        for original, nuevo in self.reemplazos.items():
-            if original in cadena:
-                return cadena.replace(original, nuevo)
+        #for original, nuevo in self.reemplazos.items():
+        #    if original in cadena:
+        #        return cadena.replace(original, nuevo)
+        # Reemplazos seguros por dominio
+        parsed = urlparse(cadena)
+        if parsed.netloc in self.reemplazos:
+            nuevo_netloc = self.reemplazos[parsed.netloc]
+            parsed = parsed._replace(netloc=nuevo_netloc)
+            return urlunparse(parsed)
 
         return cadena
 
