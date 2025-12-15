@@ -60,6 +60,7 @@ class Alterclip:
             "nhentai.net": "nhentaix.net",
             "actualidad.rt.com": "esrt.space",
             "www.youtube.com": INVIDIOUS_INSTANCE,
+            "m.youtube.com": INVIDIOUS_INSTANCE,
             "youtube.com": INVIDIOUS_INSTANCE,
             "youtu.be": INVIDIOUS_INSTANCE
         }
