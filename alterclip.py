@@ -57,7 +57,8 @@ class Alterclip:
             "twitter.com": "fixupx.com",
             "pornhub.com": "pxrnhub.com",
             "nhentai.net": "nhentaix.net",
-            "actualidad.rt.com": "esrt.space"
+            "actualidad.rt.com": "esrt.space",
+            "www.youtube.com": "inv.nadeko.net"
         }
         self.streaming_sources = [
             "instagram.com",
