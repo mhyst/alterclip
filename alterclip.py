@@ -37,6 +37,7 @@ from urllib.parse import urlparse, urlunparse, parse_qs
 
 # Constantes
 REPRODUCTOR_VIDEO = os.getenv("ALTERCLIP_PLAYER", "mpv")
+INVIDIOUS_INSTANCE = os.getenv("ALTERCLIP_INVIDIOUS_INSTANCE", "inv.nadeko.net")
 MODO_STREAMING = 0
 MODO_OFFLINE = 1
 SIGNAL_STREAMING = signal.SIGUSR1
@@ -58,7 +59,9 @@ class Alterclip:
             "pornhub.com": "pxrnhub.com",
             "nhentai.net": "nhentaix.net",
             "actualidad.rt.com": "esrt.space",
-            "www.youtube.com": "inv.nadeko.net"
+            "www.youtube.com": INVIDIOUS_INSTANCE,
+            "youtube.com": INVIDIOUS_INSTANCE,
+            "youtu.be": INVIDIOUS_INSTANCE
         }
         self.streaming_sources = [
             "instagram.com",
