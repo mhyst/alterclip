@@ -58,11 +58,11 @@ class Alterclip:
             "twitter.com": "fixupx.com",
             "pornhub.com": "pxrnhub.com",
             "nhentai.net": "nhentaix.net",
-            "actualidad.rt.com": "esrt.space",
-            "www.youtube.com": INVIDIOUS_INSTANCE,
-            "m.youtube.com": INVIDIOUS_INSTANCE,
-            "youtube.com": INVIDIOUS_INSTANCE,
-            "youtu.be": INVIDIOUS_INSTANCE
+            "actualidad.rt.com": "esrt.space"
+            #"www.youtube.com": INVIDIOUS_INSTANCE,
+            #"m.youtube.com": INVIDIOUS_INSTANCE,
+            #"youtube.com": INVIDIOUS_INSTANCE,
+            #"youtu.be": INVIDIOUS_INSTANCE
         }
         self.streaming_sources = [
             "instagram.com",
