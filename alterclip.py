@@ -58,7 +58,8 @@ class Alterclip:
             "twitter.com": "fixupx.com",
             "pornhub.com": "pxrnhub.com",
             "nhentai.net": "nhentaix.net",
-            "actualidad.rt.com": "esrt.space"
+            "actualidad.rt.com": "esrt.space",
+            "instagram.com": "kkinstagram.com"
             #"www.youtube.com": INVIDIOUS_INSTANCE,
             #"m.youtube.com": INVIDIOUS_INSTANCE,
             #"youtube.com": INVIDIOUS_INSTANCE,
